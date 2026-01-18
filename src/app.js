@@ -292,49 +292,79 @@ AFRAME.registerComponent('view-switch', {
     this.drawCam = document.getElementById('drawCam')
     this.previewRig = document.getElementById('previewRig')
     this.previewCam = document.getElementById('previewCam')
+    this.orthoRig = document.getElementById('orthoRig')
+    this.orthoCam = document.getElementById('orthoCam')
     this.toggleBtn = document.getElementById('viewToggle')
+    this.modeToggle = document.getElementById('modeToggle')
     this.scene = this.el.sceneEl
 
-    this.mode = null
+    this.mode = 'fpv'
+    this.dimension = '3d'
     this.worldBasePos = this.world.object3D.position.clone()
     this.worldOffset = new THREE.Vector3()
     this.worldBox = new THREE.Box3()
     this.worldSize = new THREE.Vector3()
     this.worldCenter = new THREE.Vector3()
     this.tpvTarget = new THREE.Vector3()
+    this.orthoTarget = new THREE.Vector3()
 
     this.setViewMode = this.setViewMode.bind(this)
+    this.setDimensionMode = this.setDimensionMode.bind(this)
+    this.applyMode = this.applyMode.bind(this)
 
     if (this.toggleBtn) {
       this.toggleBtn.addEventListener('click', () => {
+        if (this.dimension !== '3d') return
         const next = this.mode === 'fpv' ? 'tpv' : 'fpv'
         this.setViewMode(next)
       })
     }
 
-    this.setViewMode('fpv', { immediate: true })
+    if (this.modeToggle) {
+      this.modeToggle.addEventListener('click', () => {
+        const next = this.dimension === '3d' ? '2d' : '3d'
+        this.setDimensionMode(next)
+      })
+    }
+
+    this.applyMode({ immediate: true })
     window.setViewMode = this.setViewMode
   },
 
   setViewMode(mode, { immediate = false } = {}) {
     if (mode === this.mode) return
+    this.mode = mode
+    if (this.dimension !== '3d') return
+    this.applyMode({ immediate })
+  },
+
+  setDimensionMode(mode, { immediate = false } = {}) {
+    if (mode === this.dimension) return
+    this.dimension = mode
+    this.applyMode({ immediate })
+  },
+
+  applyMode({ immediate = false } = {}) {
     const applyMode = () => {
-      const enableTpv = mode === 'tpv'
-      this.mode = mode
+      const enable2d = this.dimension === '2d'
+      const enableTpv = !enable2d && this.mode === 'tpv'
+      const enableFpv = !enable2d && this.mode === 'fpv'
 
       if (enableTpv) {
         this.centerWorldForPreview()
-        this.drawCam.setAttribute('camera', { active: false })
-        this.previewCam.setAttribute('camera', { active: true })
+      } else if (enable2d) {
+        this.centerWorldForOrtho()
       } else {
         this.restoreWorldCenter()
-        this.drawCam.setAttribute('camera', { active: true })
-        this.previewCam.setAttribute('camera', { active: false })
       }
+
+      this.drawCam.setAttribute('camera', { active: enableFpv })
+      this.previewCam.setAttribute('camera', { active: enableTpv })
+      this.orthoCam.setAttribute('camera', { active: enable2d })
 
       const rigComponent = this.rig?.components['brush-rig']
       if (rigComponent) {
-        rigComponent.setDrawingEnabled(!enableTpv)
+        rigComponent.setDrawingEnabled(enableFpv)
       }
 
       const tpvControls = this.previewRig?.components['tpv-controls']
@@ -345,6 +375,13 @@ AFRAME.registerComponent('view-switch', {
       if (this.toggleBtn) {
         this.toggleBtn.textContent = enableTpv ? '🧿' : '👁'
         this.toggleBtn.setAttribute('aria-pressed', enableTpv ? 'true' : 'false')
+        this.toggleBtn.disabled = enable2d
+        this.toggleBtn.setAttribute('aria-hidden', enable2d ? 'true' : 'false')
+      }
+
+      if (this.modeToggle) {
+        this.modeToggle.textContent = enable2d ? '3D' : '2D'
+        this.modeToggle.setAttribute('aria-pressed', enable2d ? 'true' : 'false')
       }
     }
 
@@ -387,6 +424,23 @@ AFRAME.registerComponent('view-switch', {
       this.previewRig.object3D.position.set(0, targetY, distance)
       this.previewRig.object3D.lookAt(this.tpvTarget)
     }
+  },
+
+  centerWorldForOrtho() {
+    this.centerWorldForPreview()
+
+    const radius = Math.max(this.worldSize.x, this.worldSize.z)
+    const height = THREE.MathUtils.clamp(radius * 1.6 + 1.4, 2.6, 10)
+    const orthoSize = Math.max(radius * 0.7 + 1.2, 2.8)
+
+    this.orthoTarget.set(0, 0, 0)
+    this.orthoRig.object3D.position.set(0, height, 0)
+    this.orthoRig.object3D.lookAt(this.orthoTarget)
+
+    this.orthoCam.setAttribute('camera', {
+      projection: 'orthographic',
+      orthographicSize: orthoSize
+    })
   },
 
   restoreWorldCenter() {

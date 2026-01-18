@@ -14,7 +14,10 @@
   <div id="ui">
     <button id="micBtn">🎤 MICRO</button>
   </div>
-  <button id="viewToggle" class="view-toggle" aria-label="Basculer la vue">👁</button>
+  <div id="viewControls">
+    <button id="viewToggle" class="view-toggle" aria-label="Basculer la vue 3D">👁</button>
+    <button id="modeToggle" class="mode-toggle" aria-label="Basculer le mode 2D">2D</button>
+  </div>
   <div id="status">mic:off</div>
 
   <a-scene
@@ -55,6 +58,14 @@
         id="previewCam"
         camera="active: false"
         look-controls="enabled: true; mouseEnabled: false; touchEnabled: false; magicWindowTrackingEnabled: true"
+      ></a-camera>
+    </a-entity>
+
+    <a-entity id="orthoRig" position="0 5 0">
+      <a-camera
+        id="orthoCam"
+        camera="active: false; projection: orthographic; orthographicSize: 3"
+        look-controls="enabled: false"
       ></a-camera>
     </a-entity>
   </a-scene>
