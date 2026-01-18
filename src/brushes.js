@@ -59,7 +59,21 @@ export class BrushRibbon {
     this._tangent = new THREE.Vector3()
     this._lateral = new THREE.Vector3()
     this._tmp = new THREE.Vector3()
+    this._tmpMine = new THREE.Vector3()
     this._color = new THREE.Color()
+
+    // mines & particules d'encre
+    this.mineInterval = 420
+    this.mineAcc = 0
+    this.mineDelay = 2000
+    this.mines = []
+    this.particles = []
+    this.mineGeometry = new THREE.SphereGeometry(0.035, 12, 12)
+    this.mineMaterial = new THREE.MeshStandardMaterial({
+      color: 0x050505,
+      roughness: 0.9,
+      metalness: 0.0
+    })
   }
 
   /* ---------------- GEOMETRY ---------------- */
@@ -153,6 +167,117 @@ export class BrushRibbon {
     }
   }
 
+  _spawnMine(position, time) {
+    const mesh = new THREE.Mesh(this.mineGeometry, this.mineMaterial)
+    mesh.position.copy(position)
+    mesh.frustumCulled = false
+    this.world.object3D.add(mesh)
+    this.mines.push({ mesh, born: time })
+  }
+
+  _explodeMine(mine, time) {
+    const count = 70
+    const positions = new Float32Array(count * 3)
+    const velocities = new Float32Array(count * 3)
+    const spread = 0.12
+    const speed = 0.55
+    const origin = mine.mesh.position
+
+    for (let i = 0; i < count; i++) {
+      const i3 = i * 3
+      const angle = Math.random() * Math.PI * 2
+      const radius = Math.random() * spread
+      const yBias = Math.random() * 0.12
+
+      positions[i3] = origin.x + Math.cos(angle) * radius
+      positions[i3 + 1] = origin.y + (Math.random() - 0.5) * 0.04
+      positions[i3 + 2] = origin.z + Math.sin(angle) * radius
+
+      velocities[i3] = Math.cos(angle) * (speed + Math.random() * 0.4)
+      velocities[i3 + 1] = yBias
+      velocities[i3 + 2] = Math.sin(angle) * (speed + Math.random() * 0.4)
+    }
+
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    const material = new THREE.PointsMaterial({
+      color: 0x050505,
+      size: 0.05,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false
+    })
+    const points = new THREE.Points(geometry, material)
+    points.frustumCulled = false
+    this.world.object3D.add(points)
+    this.particles.push({
+      points,
+      positions,
+      velocities,
+      born: time,
+      ttl: 1600
+    })
+  }
+
+  _updateMines(time, dt, energy) {
+    const minInterval = Math.max(140, this.mineInterval * (1.1 - energy * 0.6))
+    this.mineAcc += dt
+    while (this.mineAcc >= minInterval) {
+      this.mineAcc -= minInterval
+      if (energy < 0.18) continue
+      const jitter = 0.22 + energy * 0.25
+      this._tmpMine.set(
+        (Math.random() - 0.5) * jitter,
+        (Math.random() - 0.5) * jitter * 0.6,
+        (Math.random() - 0.5) * jitter
+      )
+      const pos = this._tmp.clone().add(this._tmpMine)
+      this._spawnMine(pos, time)
+    }
+
+    for (let i = this.mines.length - 1; i >= 0; i--) {
+      const mine = this.mines[i]
+      if (time - mine.born >= this.mineDelay) {
+        this.world.object3D.remove(mine.mesh)
+        this._explodeMine(mine, time)
+        this.mines.splice(i, 1)
+      }
+    }
+  }
+
+  _updateParticles(time, dt) {
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const system = this.particles[i]
+      const age = time - system.born
+      const life = age / system.ttl
+      const drag = 0.9
+      const count = system.positions.length / 3
+      const decay = 1 - life
+
+      for (let p = 0; p < count; p++) {
+        const i3 = p * 3
+        system.velocities[i3] *= drag
+        system.velocities[i3 + 1] *= drag
+        system.velocities[i3 + 2] *= drag
+
+        system.positions[i3] += system.velocities[i3] * dt * 0.001
+        system.positions[i3 + 1] += system.velocities[i3 + 1] * dt * 0.001
+        system.positions[i3 + 2] += system.velocities[i3 + 2] * dt * 0.001
+      }
+
+      system.points.material.opacity = Math.max(0, decay * 0.9)
+      system.points.material.size = 0.05 + (1 - decay) * 0.07
+      system.points.geometry.attributes.position.needsUpdate = true
+
+      if (age >= system.ttl) {
+        this.world.object3D.remove(system.points)
+        system.points.geometry.dispose()
+        system.points.material.dispose()
+        this.particles.splice(i, 1)
+      }
+    }
+  }
+
   /* ---------------- UPDATE ---------------- */
 
   update(drawPos, audio = { low: 0, mid: 0, high: 0 }, time = 0, dt = 16) {
@@ -184,6 +309,9 @@ export class BrushRibbon {
     this.material.emissiveIntensity = clamp(0.4 + energy * 1.6 + audio.high, 0.2, 2.2)
 
     const pts = this.curve.getPoints(this.sampleCount)
+    this._tmp.copy(drawPos)
+    this._updateMines(time, dt, energy)
+    this._updateParticles(time, dt)
 
     for (let i = 0; i < pts.length; i++) {
       const t = i / (pts.length - 1)
@@ -247,5 +375,19 @@ export class BrushRibbon {
       m.material.dispose()
     })
     this.strokes.length = 0
+
+    this.mines.forEach(mine => {
+      this.world.object3D.remove(mine.mesh)
+    })
+    this.mines.length = 0
+
+    this.particles.forEach(system => {
+      this.world.object3D.remove(system.points)
+      system.points.geometry.dispose()
+      system.points.material.dispose()
+    })
+    this.particles.length = 0
+    this.mineGeometry.dispose()
+    this.mineMaterial.dispose()
   }
 }
