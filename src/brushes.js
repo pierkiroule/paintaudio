@@ -35,9 +35,12 @@ export class BrushRibbon {
     // ---- géométrie active
     this.geometry = new THREE.BufferGeometry()
     this.material = new THREE.MeshStandardMaterial({
-      color: 0x1b1b1b,
+      color: 0xffffff,
+      vertexColors: true,
       transparent: true,
       opacity: this.opacity,
+      emissive: new THREE.Color(0x111111),
+      emissiveIntensity: 0.6,
       depthWrite: false,
       side: THREE.DoubleSide,
       roughness: 0.65,
@@ -56,6 +59,7 @@ export class BrushRibbon {
     this._tangent = new THREE.Vector3()
     this._lateral = new THREE.Vector3()
     this._tmp = new THREE.Vector3()
+    this._color = new THREE.Color()
   }
 
   /* ---------------- GEOMETRY ---------------- */
@@ -65,6 +69,7 @@ export class BrushRibbon {
     this._positions = new Float32Array(vCount * 3)
     this._uvs = new Float32Array(vCount * 2)
     this._indices = new Uint16Array(this.sampleCount * 6)
+    this._colors = new Float32Array(vCount * 3)
 
     for (let i = 0; i <= this.sampleCount; i++) {
       const v = i / this.sampleCount
@@ -93,6 +98,7 @@ export class BrushRibbon {
 
     this.geometry.setAttribute('position', new THREE.BufferAttribute(this._positions, 3))
     this.geometry.setAttribute('uv', new THREE.BufferAttribute(this._uvs, 2))
+    this.geometry.setAttribute('color', new THREE.BufferAttribute(this._colors, 3))
     this.geometry.setIndex(new THREE.BufferAttribute(this._indices, 1))
   }
 
@@ -130,6 +136,7 @@ export class BrushRibbon {
     const mat = this.material.clone()
 
     mat.opacity *= 0.78
+    mat.emissiveIntensity *= 0.7
     mat.depthWrite = false
 
     const mesh = new THREE.Mesh(geom, mat)
@@ -154,10 +161,27 @@ export class BrushRibbon {
     this._ensureControlPoints(drawPos)
     this._updateControlPoints(drawPos)
 
-    // modulation lente
-    this.width = lerp(this.width, this.baseWidth + audio.mid * 0.22, 0.05)
-    this.opacity = lerp(this.opacity, this.baseOpacity + audio.low * 0.1, 0.04)
-    this.material.opacity = clamp(this.opacity, 0.02, 0.08)
+    const energy = clamp(
+      audio.energy ?? (audio.low * 0.4 + audio.mid * 0.35 + audio.high * 0.25),
+      0,
+      1
+    )
+
+    // modulation lente + pulsation
+    const widthTarget =
+      this.baseWidth +
+      audio.mid * 0.32 +
+      audio.low * 0.16 +
+      Math.sin(time * 0.0022) * 0.03 * (0.3 + audio.high)
+    this.width = lerp(this.width, widthTarget, 0.08)
+    this.opacity = lerp(this.opacity, this.baseOpacity + audio.low * 0.12, 0.04)
+    this.material.opacity = clamp(this.opacity, 0.02, 0.1)
+    this.material.emissive.setHSL(
+      (0.58 + audio.high * 0.22 + Math.sin(time * 0.00025) * 0.06) % 1,
+      0.65,
+      0.5
+    )
+    this.material.emissiveIntensity = clamp(0.4 + energy * 1.6 + audio.high, 0.2, 2.2)
 
     const pts = this.curve.getPoints(this.sampleCount)
 
@@ -186,9 +210,27 @@ export class BrushRibbon {
       this._positions[idx + 3] = right.x
       this._positions[idx + 4] = right.y
       this._positions[idx + 5] = right.z
+
+      const hue =
+        (0.55 +
+          audio.high * 0.3 +
+          t * 0.25 +
+          Math.sin(time * 0.0006 + t * 6) * 0.08) %
+        1
+      const saturation = clamp(0.35 + audio.mid * 0.6, 0.2, 1)
+      const lightness = clamp(0.28 + profile * 0.4 + energy * 0.22, 0.15, 0.85)
+      this._color.setHSL(hue, saturation, lightness)
+      const cidx = i * 6
+      this._colors[cidx] = this._color.r
+      this._colors[cidx + 1] = this._color.g
+      this._colors[cidx + 2] = this._color.b
+      this._colors[cidx + 3] = this._color.r
+      this._colors[cidx + 4] = this._color.g
+      this._colors[cidx + 5] = this._color.b
     }
 
     this.geometry.attributes.position.needsUpdate = true
+    this.geometry.attributes.color.needsUpdate = true
     this.geometry.computeVertexNormals()
 
     // accumulation continue (clé)
