@@ -19,14 +19,13 @@ export class BrushRibbon {
     this.controlPoints = []
     this.curve = new THREE.CatmullRomCurve3(this.controlPoints)
     this.geometry = new THREE.BufferGeometry()
-    this.material = new THREE.MeshStandardMaterial({
-      color: '#f4f0e8',
+    this.material = new THREE.MeshBasicMaterial({
+      color: '#111111',
       transparent: true,
       opacity: this.opacity,
       depthWrite: false,
       side: THREE.DoubleSide,
-      roughness: 0.6,
-      metalness: 0.05
+      toneMapped: false
     })
     this.mesh = new THREE.Mesh(this.geometry, this.material)
     this.mesh.frustumCulled = false
@@ -48,7 +47,7 @@ export class BrushRibbon {
     const vertexCount = (this.sampleCount + 1) * 2
     this._positions = new Float32Array(vertexCount * 3)
     this._uvs = new Float32Array(vertexCount * 2)
-    this._indices = new Uint32Array(this.sampleCount * 6)
+    this._indices = new Uint16Array(this.sampleCount * 6)
 
     for (let i = 0; i <= this.sampleCount; i += 1) {
       const t = i / this.sampleCount
@@ -143,6 +142,7 @@ export class BrushRibbon {
 
     this.geometry.attributes.position.needsUpdate = true
     this.geometry.computeVertexNormals()
+    this.geometry.computeBoundingSphere()
   }
 
   dispose() {

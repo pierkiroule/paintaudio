@@ -35,7 +35,7 @@ AFRAME.registerComponent('brush-rig', {
       maxControlPoints: 5,
       sampleCount: 40,
       baseWidth: 0.06,
-      baseOpacity: 0.08
+      baseOpacity: 0.1
     })
     this.drawingEnabled = true
 
