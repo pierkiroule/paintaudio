@@ -27,6 +27,8 @@ AFRAME.registerComponent('brush-rig', {
     this.dirUp = new THREE.Vector3()
 
     this.drawDist = DRAW_BASE_DIST
+    this.pitch = 0
+    this.roll = 0
 
     this.brushManager = new BrushManager(this.world)
     this.brushManager.addSlot({
@@ -111,6 +113,14 @@ AFRAME.registerComponent('brush-rig', {
 
     // orientation douce (pas de lookAt brutal)
     this.el.object3D.rotation.y += Math.sin(this.t * 0.1) * 0.0006
+
+    const rotBlend = 1 - Math.exp(-dt * 0.0025)
+    const pitchTarget = Math.sin(this.t * 0.12) * 0.1 + Math.sin(this.t * 0.32) * 0.05
+    const rollTarget = Math.cos(this.t * 0.17) * 0.06
+    this.pitch = THREE.MathUtils.lerp(this.pitch, pitchTarget, rotBlend)
+    this.roll = THREE.MathUtils.lerp(this.roll, rollTarget, rotBlend)
+    this.el.object3D.rotation.x = this.pitch
+    this.el.object3D.rotation.z = this.roll
 
     // distance de dessin modulée par l’audio
     this.drawDist = DRAW_BASE_DIST + b.mid * 0.6 - b.low * 0.3
@@ -327,12 +337,12 @@ AFRAME.registerComponent('view-switch', {
 
       if (enableTpv) {
         this.centerWorldForPreview()
-        this.drawCam.setAttribute('camera', 'active', false)
-        this.previewCam.setAttribute('camera', 'active', true)
+        this.drawCam.setAttribute('camera', { active: false })
+        this.previewCam.setAttribute('camera', { active: true })
       } else {
         this.restoreWorldCenter()
-        this.drawCam.setAttribute('camera', 'active', true)
-        this.previewCam.setAttribute('camera', 'active', false)
+        this.drawCam.setAttribute('camera', { active: true })
+        this.previewCam.setAttribute('camera', { active: false })
       }
 
       const rigComponent = this.rig?.components['brush-rig']
