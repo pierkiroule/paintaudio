@@ -112,7 +112,7 @@ class InkBrush extends BaseBrush {
         audio.energy * 0.1
       )
 
-      const opacity = (0.06 + density * 0.12) * this.weight
+      const opacity = (0.12 + density * 0.2) * this.weight
 
       const e = document.createElement('a-entity')
       e.setAttribute(
@@ -181,7 +181,7 @@ class BubbleBrush extends BaseBrush {
         0.05
       )
 
-      const opacity = (0.05 + audio.low * 0.12) * this.weight
+      const opacity = (0.1 + audio.low * 0.18) * this.weight
 
       const e = document.createElement('a-entity')
       e.setAttribute(
@@ -251,7 +251,7 @@ class GlowBrush extends BaseBrush {
         0.15
       )
 
-      const opacity = (0.1 + rhythm * 0.2) * this.weight
+      const opacity = (0.16 + rhythm * 0.24) * this.weight
 
       const e = document.createElement('a-entity')
       e.setAttribute(

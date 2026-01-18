@@ -40,8 +40,8 @@ a-scene canvas {
 
 #viewToggle {
   position: fixed;
-  right: 14px;
-  bottom: 14px;
+  top: 12px;
+  left: 50%;
   z-index: 10;
   width: 44px;
   height: 44px;
@@ -53,10 +53,11 @@ a-scene canvas {
   place-items: center;
   opacity: 0.72;
   backdrop-filter: blur(4px);
+  transform: translateX(-50%);
 }
 
 .view-toggle:active {
-  transform: scale(0.97);
+  transform: translateX(-50%) scale(0.97);
 }
 
 #micBtn,

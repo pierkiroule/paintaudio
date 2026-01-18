@@ -115,12 +115,14 @@ AFRAME.registerComponent('brush-rig', {
     this.el.object3D.rotation.y += Math.sin(this.t * 0.1) * 0.0006
 
     const rotBlend = 1 - Math.exp(-dt * 0.0025)
-    const pitchTarget = Math.sin(this.t * 0.12) * 0.1 + Math.sin(this.t * 0.32) * 0.05
-    const rollTarget = Math.cos(this.t * 0.17) * 0.06
+    const pitchTarget = Math.sin(this.t * 0.12) * 0.18 + Math.sin(this.t * 0.32) * 0.08
+    const rollTarget = Math.cos(this.t * 0.17) * 0.08
     this.pitch = THREE.MathUtils.lerp(this.pitch, pitchTarget, rotBlend)
     this.roll = THREE.MathUtils.lerp(this.roll, rollTarget, rotBlend)
-    this.el.object3D.rotation.x = this.pitch
-    this.el.object3D.rotation.z = this.roll
+    if (this.camera) {
+      this.camera.object3D.rotation.x = this.pitch
+      this.camera.object3D.rotation.z = this.roll
+    }
 
     // distance de dessin modulée par l’audio
     this.drawDist = DRAW_BASE_DIST + b.mid * 0.6 - b.low * 0.3
