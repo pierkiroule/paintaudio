@@ -30,11 +30,7 @@ a-scene canvas {
 #ui {
   position: fixed;
   left: 12px;
-  right: 12px;
   bottom: 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   z-index: 10;
 }
 
@@ -48,10 +44,20 @@ a-scene canvas {
 }
 
 #status {
+  position: fixed;
+  top: 12px;
+  right: 12px;
   font-size: 12px;
   opacity: 0.7;
   background: rgba(242,240,235,0.6);
   border: 1px solid rgba(0,0,0,0.12);
   border-radius: 999px;
   padding: 8px 12px;
+  z-index: 10;
+}
+
+.a-enter-vr,
+.a-enter-ar {
+  right: 12px;
+  bottom: 12px;
 }

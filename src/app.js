@@ -7,6 +7,7 @@ AFRAME.registerComponent('brush-rig', {
     this.world = document.getElementById('world')
     this.status = document.getElementById('status')
     this.cursor = document.getElementById('drawCursor')
+    this.camera = this.el.querySelector('a-camera')
 
     this.analyser = null
     this.fft = null
@@ -93,11 +94,13 @@ AFRAME.registerComponent('brush-rig', {
 
     // calcul du point DEVANT la caméra
     if (b.energy > 0.03) {
-      const camObj = this.el.object3D
-      const dirFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camObj.quaternion)
-      const drawPos = camObj.position.clone().add(
-        dirFwd.multiplyScalar(this.drawDist)
-      )
+      const camObj = this.camera?.object3D || this.el.object3D
+      const camWorldPos = new THREE.Vector3()
+      const camWorldQuat = new THREE.Quaternion()
+      camObj.getWorldPosition(camWorldPos)
+      camObj.getWorldQuaternion(camWorldQuat)
+      const dirFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camWorldQuat)
+      const drawPos = camWorldPos.add(dirFwd.multiplyScalar(this.drawDist))
 
       // dépôts parcimonieux
       if (Math.sin(this.t * 2.0) > 0.75) {

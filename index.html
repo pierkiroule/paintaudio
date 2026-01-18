@@ -13,13 +13,13 @@
 <body>
   <div id="ui">
     <button id="micBtn">🎤 MICRO</button>
-    <div id="status">mic:off</div>
   </div>
+  <div id="status">mic:off</div>
 
   <a-scene
     background="color: #f2f0eb"
-    vr-mode-ui="enabled: false"
-    device-orientation-permission-ui="enabled: false"
+    vr-mode-ui="enabled: true"
+    device-orientation-permission-ui="enabled: true"
     renderer="antialias: true; colorManagement: true;"
   >
     <!-- lumière douce -->
@@ -32,17 +32,17 @@
     <a-entity id="rig" brush-rig position="0 1.6 3.2">
       <a-camera
         wasd-controls-enabled="false"
-        look-controls="enabled: false"
+        look-controls="enabled: true"
         fov="62"
-      ></a-camera>
-
-      <!-- repère discret du point de dessin -->
-      <a-entity
-        id="drawCursor"
-        geometry="primitive: sphere; radius: 0.04"
-        material="color: #111; opacity: 0.15; transparent: true; depthWrite: false"
-        position="0 0 -1.1"
-      ></a-entity>
+      >
+        <!-- repère discret du point de dessin -->
+        <a-entity
+          id="drawCursor"
+          geometry="primitive: sphere; radius: 0.04"
+          material="color: #111; opacity: 0.15; transparent: true; depthWrite: false"
+          position="0 0 -1.1"
+        ></a-entity>
+      </a-camera>
     </a-entity>
   </a-scene>
 </body>
