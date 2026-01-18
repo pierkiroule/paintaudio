@@ -25,17 +25,17 @@ function palette(bands, hueShift = 0, energyBoost = 0) {
     140 * (mid / weight) +
     235 * (high / weight)
   ) + hueShift + 360) % 360
-  const saturation = 35 + energy * 50
-  const lightness = 22 + energy * 25
+  const saturation = 45 + energy * 55
+  const lightness = 18 + energy * 36
   const colorObj = new THREE.Color().setHSL(hue / 360, saturation / 100, lightness / 100)
   const emissiveObj = new THREE.Color().setHSL(
     ((hue + 18) % 360) / 360,
-    (saturation + 10) / 100,
-    (lightness + 8) / 100
+    clamp((saturation + 18) / 100, 0, 1),
+    clamp((lightness + 12) / 100, 0, 1)
   )
   const color = `#${colorObj.getHexString()}`
   const emissive = `#${emissiveObj.getHexString()}`
-  const opacity = 0.18 + energy * 0.22
+  const opacity = 0.3 + energy * 0.4
   return { color, emissive, opacity }
 }
 
@@ -86,8 +86,8 @@ class InkBrush extends BaseBrush {
     if (this.weight < 0.02) return
 
     const density = clamp(audio.low * 1.25, 0, 1)
-    const interval = lerp(190, 70, density)
-    this.spawnClock += dt * (0.4 + this.weight)
+    const interval = lerp(170, 55, density)
+    this.spawnClock += dt * (0.55 + this.weight)
 
     while (this.spawnClock >= interval) {
       this.spawnClock -= interval
@@ -95,24 +95,28 @@ class InkBrush extends BaseBrush {
       const lineWiggle = noiseSigned(t, this.seed + 0.5) * audio.high
       const offset = new THREE.Vector3()
       offset
-        .addScaledVector(right, lineWiggle * 0.02)
-        .addScaledVector(up, noiseSigned(t, this.seed + 1.4) * 0.018)
+        .addScaledVector(right, lineWiggle * 0.045)
+        .addScaledVector(up, noiseSigned(t, this.seed + 1.4) * 0.035)
 
-      const jitterAmt = 0.01 + audio.high * 0.03
+      const jitterAmt = 0.015 + audio.high * 0.06
       offset.addScaledVector(right, noiseSigned(t, this.seed + 2.2) * jitterAmt)
       offset.addScaledVector(up, noiseSigned(t, this.seed + 3.1) * jitterAmt)
 
       const drawPos = pos.clone().add(offset)
 
-      const thickness = 0.006 + audio.mid * 0.03
-      const length = 0.06 + density * 0.12
+      const thickness = 0.008 + audio.mid * 0.04
+      const length = 0.09 + density * 0.18
       const paint = palette(
         { low: density, mid: audio.mid, high: audio.high, energy: audio.energy },
         this.hueShift,
-        audio.energy * 0.1
+        audio.energy * 0.15
       )
 
-      const opacity = (0.12 + density * 0.2) * this.weight
+      const opacity = clamp(
+        0.32 + density * 0.32 + audio.energy * 0.25,
+        0.3,
+        0.8
+      ) * this.weight
 
       const e = document.createElement('a-entity')
       e.setAttribute(
@@ -126,7 +130,7 @@ class InkBrush extends BaseBrush {
         roughness: 0.55,
         metalness: 0.1,
         emissive: paint.emissive,
-        emissiveIntensity: 0.15,
+        emissiveIntensity: 0.3,
         transparent: true,
         depthWrite: false
       })
@@ -159,14 +163,14 @@ class BubbleBrush extends BaseBrush {
     if (this.weight < 0.02) return
 
     const frequency = clamp(audio.mid * 1.15, 0, 1)
-    const interval = lerp(320, 130, frequency)
-    this.spawnClock += dt * (0.3 + this.weight)
+    const interval = lerp(280, 110, frequency)
+    this.spawnClock += dt * (0.45 + this.weight)
 
     while (this.spawnClock >= interval) {
       this.spawnClock -= interval
       const t = this.elapsed
-      const size = 0.04 + audio.low * 0.18
-      const jitter = (0.01 + audio.high * 0.05) * this.weight
+      const size = 0.05 + audio.low * 0.22
+      const jitter = (0.015 + audio.high * 0.08) * this.weight
 
       const drift = noiseSigned(t, this.seed + 1.9) * jitter
       const driftUp = noiseSigned(t, this.seed + 2.6) * jitter
@@ -181,7 +185,11 @@ class BubbleBrush extends BaseBrush {
         0.05
       )
 
-      const opacity = (0.1 + audio.low * 0.18) * this.weight
+      const opacity = clamp(
+        0.34 + audio.low * 0.28 + audio.energy * 0.22,
+        0.3,
+        0.8
+      ) * this.weight
 
       const e = document.createElement('a-entity')
       e.setAttribute(
@@ -195,7 +203,7 @@ class BubbleBrush extends BaseBrush {
         roughness: 0.2,
         metalness: 0.05,
         emissive: paint.emissive,
-        emissiveIntensity: 0.25,
+        emissiveIntensity: 0.4,
         transparent: true,
         depthWrite: false
       })
@@ -203,8 +211,8 @@ class BubbleBrush extends BaseBrush {
       e.object3D.position.copy(drawPos)
       e.object3D.scale.setScalar(size)
 
-      const floatOffset = 0.12 + audio.low * 0.2
-      const floatDuration = 6500 + smoothNoise(t, this.seed + 4.1) * 2500
+      const floatOffset = 0.18 + audio.low * 0.32
+      const floatDuration = 5200 + smoothNoise(t, this.seed + 4.1) * 2100
       e.setAttribute(
         'animation__float',
         `property: position; to: ${drawPos.x} ${drawPos.y + floatOffset} ${drawPos.z}; dir: alternate; dur: ${Math.round(floatDuration)}; easing: easeInOutSine; loop: true`
@@ -227,14 +235,14 @@ class GlowBrush extends BaseBrush {
     if (this.weight < 0.02) return
 
     const rhythm = clamp(audio.mid * 1.2, 0, 1)
-    const interval = lerp(240, 90, rhythm)
-    this.spawnClock += dt * (0.35 + this.weight)
+    const interval = lerp(210, 80, rhythm)
+    this.spawnClock += dt * (0.5 + this.weight)
 
     while (this.spawnClock >= interval) {
       this.spawnClock -= interval
       const t = this.elapsed
-      const amplitude = 0.05 + audio.mid * 0.18
-      const frequency = 0.6 + audio.high * 1.8
+      const amplitude = 0.08 + audio.mid * 0.26
+      const frequency = 0.9 + audio.high * 2.6
 
       const wave = Math.sin(t * frequency + this.seed) * amplitude
       const waveUp = Math.cos(t * frequency * 0.8 + this.seed * 1.4) * amplitude * 0.6
@@ -244,14 +252,18 @@ class GlowBrush extends BaseBrush {
         .addScaledVector(right, wave)
         .addScaledVector(up, waveUp)
 
-      const size = 0.02 + audio.mid * 0.05
+      const size = 0.03 + audio.mid * 0.07
       const paint = palette(
         { low: audio.low * 0.4, mid: rhythm, high: audio.high, energy: audio.energy },
         this.hueShift + 22,
         0.15
       )
 
-      const opacity = (0.16 + rhythm * 0.24) * this.weight
+      const opacity = clamp(
+        0.38 + rhythm * 0.28 + audio.high * 0.18,
+        0.3,
+        0.8
+      ) * this.weight
 
       const e = document.createElement('a-entity')
       e.setAttribute(
@@ -265,7 +277,7 @@ class GlowBrush extends BaseBrush {
         roughness: 0.1,
         metalness: 0.2,
         emissive: paint.emissive,
-        emissiveIntensity: 0.6,
+        emissiveIntensity: 0.85,
         transparent: true,
         depthWrite: false
       })
@@ -338,7 +350,7 @@ export class BrushManager {
 
   update(audio, time, dt, camPos, forward, right, up) {
     this.slots.forEach((slot, index) => {
-      const audioLift = audio.mid * 0.5 - audio.low * 0.22
+      const audioLift = audio.mid * 0.75 - audio.low * 0.35 + audio.energy * 0.25
       const slotDist = slot.distance + audioLift
 
       const drawPos = camPos

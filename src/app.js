@@ -99,10 +99,11 @@ AFRAME.registerComponent('brush-rig', {
     const nx = Math.sin(this.t * 0.15)
     const nz = Math.cos(this.t * 0.18)
 
+    const sway = 1 + b.energy * 0.6
     this.target.set(
-      nx * 2.2,
-      1.6,
-      3.2 + nz * 2.2
+      nx * 2.6 * sway,
+      1.6 + Math.sin(this.t * 0.22) * 0.12 * sway,
+      3.2 + nz * 2.6 * sway
     )
 
     this.dir.copy(this.target).sub(this.pos)
@@ -112,11 +113,11 @@ AFRAME.registerComponent('brush-rig', {
     this.el.object3D.position.copy(this.pos)
 
     // orientation douce (pas de lookAt brutal)
-    this.el.object3D.rotation.y += Math.sin(this.t * 0.1) * 0.0006
+    this.el.object3D.rotation.y += Math.sin(this.t * 0.1) * 0.0011 * (1 + b.energy * 0.5)
 
     const rotBlend = 1 - Math.exp(-dt * 0.0025)
-    const pitchTarget = Math.sin(this.t * 0.12) * 0.18 + Math.sin(this.t * 0.32) * 0.08
-    const rollTarget = Math.cos(this.t * 0.17) * 0.08
+    const pitchTarget = Math.sin(this.t * 0.12) * 0.24 + Math.sin(this.t * 0.32) * 0.12
+    const rollTarget = Math.cos(this.t * 0.17) * 0.12
     this.pitch = THREE.MathUtils.lerp(this.pitch, pitchTarget, rotBlend)
     this.roll = THREE.MathUtils.lerp(this.roll, rollTarget, rotBlend)
     if (this.camera) {
@@ -125,8 +126,10 @@ AFRAME.registerComponent('brush-rig', {
     }
 
     // distance de dessin modulée par l’audio
-    this.drawDist = DRAW_BASE_DIST + b.mid * 0.6 - b.low * 0.3
-    this.cursor.object3D.position.z = -this.drawDist
+    this.drawDist = DRAW_BASE_DIST + b.mid * 0.9 - b.low * 0.35
+    if (this.cursor) {
+      this.cursor.object3D.position.z = -this.drawDist
+    }
 
     // calcul du point DEVANT la caméra
     const camObj = this.camera?.object3D || this.el.object3D
