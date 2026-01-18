@@ -60,18 +60,13 @@ a-scene canvas {
   transform: translateX(-50%) scale(0.97);
 }
 
-#micBtn,
-#autoBtn {
+#micBtn {
   padding: 12px 18px;
   border-radius: 999px;
   border: 2px solid #111;
   background: rgba(242,240,235,0.7);
   font-weight: 800;
   letter-spacing: 0.12em;
-}
-
-#autoBtn {
-  letter-spacing: 0.08em;
 }
 
 #status {
