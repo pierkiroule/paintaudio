@@ -22,6 +22,7 @@ export class BrushRibbon {
     this.texture = this._createWatercolorTexture()
     this.material = new THREE.MeshStandardMaterial({
       color: '#1d1d1d',
+      vertexColors: true,
       transparent: true,
       opacity: this.opacity,
       depthWrite: false,
@@ -42,7 +43,10 @@ export class BrushRibbon {
     this._right = new THREE.Vector3()
     this._positions = null
     this._uvs = null
+    this._colors = null
     this._indices = null
+    this._baseColor = new THREE.Color()
+    this._tmpColor = new THREE.Color()
     this._initGeometry()
   }
 
@@ -77,6 +81,7 @@ export class BrushRibbon {
     const vertexCount = (this.sampleCount + 1) * 2
     this._positions = new Float32Array(vertexCount * 3)
     this._uvs = new Float32Array(vertexCount * 2)
+    this._colors = new Float32Array(vertexCount * 3)
     this._indices = new Uint16Array(this.sampleCount * 6)
 
     for (let i = 0; i <= this.sampleCount; i += 1) {
@@ -104,13 +109,14 @@ export class BrushRibbon {
 
     this.geometry.setAttribute('position', new THREE.BufferAttribute(this._positions, 3))
     this.geometry.setAttribute('uv', new THREE.BufferAttribute(this._uvs, 2))
+    this.geometry.setAttribute('color', new THREE.BufferAttribute(this._colors, 3))
     this.geometry.setIndex(new THREE.BufferAttribute(this._indices, 1))
   }
 
   _ensureControlPoints(drawPos) {
     if (this.controlPoints.length > 0) return
     for (let i = 0; i < this.maxControlPoints; i += 1) {
-      const offset = new THREE.Vector3(0, 0, -0.04 * i)
+      const offset = new THREE.Vector3(0, 0, -0.12 * i)
       this.controlPoints.push(drawPos.clone().add(offset))
     }
   }
@@ -121,7 +127,7 @@ export class BrushRibbon {
     lastPoint.lerp(drawPos, 0.04)
 
     for (let i = lastIndex - 1; i >= 0; i -= 1) {
-      const lag = 0.03 + (lastIndex - i) * 0.02
+      const lag = 0.012 + (lastIndex - i) * 0.015
       this.controlPoints[i].lerp(this.controlPoints[i + 1], lag)
     }
   }
@@ -135,8 +141,9 @@ export class BrushRibbon {
     this.material.opacity = clamp(this.opacity, 0.06, 0.12)
     const hue = ((time * 0.01) + audio.mid * 0.55 + audio.high * 0.2) % 1
     const saturation = clamp(0.55 + audio.energy * 0.35, 0.4, 0.95)
-    const lightness = clamp(0.4 + audio.low * 0.25, 0.25, 0.7)
-    this.material.color.setHSL(hue, saturation, lightness)
+    const lightness = clamp(0.45 + audio.low * 0.2, 0.25, 0.75)
+    this._baseColor.setHSL(hue, saturation, lightness)
+    this.material.color.copy(this._baseColor)
 
     const pts = this.curve.getPoints(this.sampleCount)
     const up = this._up
@@ -173,9 +180,19 @@ export class BrushRibbon {
       this._positions[posIndex + 3] = right.x
       this._positions[posIndex + 4] = right.y
       this._positions[posIndex + 5] = right.z
+
+      const fade = 1 - t * 0.85
+      this._tmpColor.copy(this._baseColor).multiplyScalar(fade)
+      this._colors[posIndex] = this._tmpColor.r
+      this._colors[posIndex + 1] = this._tmpColor.g
+      this._colors[posIndex + 2] = this._tmpColor.b
+      this._colors[posIndex + 3] = this._tmpColor.r
+      this._colors[posIndex + 4] = this._tmpColor.g
+      this._colors[posIndex + 5] = this._tmpColor.b
     }
 
     this.geometry.attributes.position.needsUpdate = true
+    this.geometry.attributes.color.needsUpdate = true
     this.geometry.computeVertexNormals()
     this.geometry.computeBoundingSphere()
   }
