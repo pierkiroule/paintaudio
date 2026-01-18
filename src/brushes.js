@@ -46,7 +46,8 @@ class BaseBrush {
     this.strokes = []
     this.seed = seed
     this.hueShift = hueShift
-    this.spawnClock = 0
+    this.spawnAcc = 0
+    this.spawnRate = 0
     this.elapsed = 0
     this.weight = 1
     this.targetWeight = 1
@@ -59,6 +60,12 @@ class BaseBrush {
   updateWeight(dt) {
     const blend = 1 - Math.exp(-dt * 0.004)
     this.weight = lerp(this.weight, this.targetWeight, blend)
+  }
+
+  advanceSpawn(dt, targetRate, response = 0.004) {
+    const blend = 1 - Math.exp(-dt * response)
+    this.spawnRate = lerp(this.spawnRate, targetRate, blend)
+    this.spawnAcc += (dt * 0.001) * this.spawnRate
   }
 
   isFadedOut() {
@@ -91,11 +98,13 @@ class InkBrush extends BaseBrush {
     if (this.weight < 0.02) return
 
     const density = clamp(audio.low * 1.25, 0, 1)
-    const interval = lerp(170, 55, density)
-    this.spawnClock += dt * (0.55 + this.weight)
+    const minRate = 1000 / 170
+    const maxRate = 1000 / 55
+    const targetRate = lerp(minRate, maxRate, density) * (0.55 + this.weight)
+    this.advanceSpawn(dt, targetRate)
 
-    while (this.spawnClock >= interval) {
-      this.spawnClock -= interval
+    while (this.spawnAcc >= 1) {
+      this.spawnAcc -= 1
       const t = this.elapsed
       const lineWiggle = noiseSigned(t, this.seed + 0.5) * audio.high
       const offset = new THREE.Vector3()
@@ -186,11 +195,13 @@ class BubbleBrush extends BaseBrush {
     if (this.weight < 0.02) return
 
     const frequency = clamp(audio.mid * 1.15, 0, 1)
-    const interval = lerp(280, 110, frequency)
-    this.spawnClock += dt * (0.45 + this.weight)
+    const minRate = 1000 / 280
+    const maxRate = 1000 / 110
+    const targetRate = lerp(minRate, maxRate, frequency) * (0.45 + this.weight)
+    this.advanceSpawn(dt, targetRate)
 
-    while (this.spawnClock >= interval) {
-      this.spawnClock -= interval
+    while (this.spawnAcc >= 1) {
+      this.spawnAcc -= 1
       const t = this.elapsed
       const size = 0.05 + audio.low * 0.22
       const jitter = (0.015 + audio.high * 0.08) * this.weight
@@ -258,11 +269,13 @@ class GlowBrush extends BaseBrush {
     if (this.weight < 0.02) return
 
     const rhythm = clamp(audio.mid * 1.2, 0, 1)
-    const interval = lerp(210, 80, rhythm)
-    this.spawnClock += dt * (0.5 + this.weight)
+    const minRate = 1000 / 210
+    const maxRate = 1000 / 80
+    const targetRate = lerp(minRate, maxRate, rhythm) * (0.5 + this.weight)
+    this.advanceSpawn(dt, targetRate)
 
-    while (this.spawnClock >= interval) {
-      this.spawnClock -= interval
+    while (this.spawnAcc >= 1) {
+      this.spawnAcc -= 1
       const t = this.elapsed
       const amplitude = 0.08 + audio.mid * 0.26
       const frequency = 0.9 + audio.high * 2.6
@@ -323,6 +336,7 @@ class TubeBrush extends BaseBrush {
   constructor(opts) {
     super(opts)
     this.lastPos = null
+    this.bloomAcc = 0
   }
 
   spawnTubeSegment(start, end, paint, radius, opacity) {
@@ -369,11 +383,13 @@ class TubeBrush extends BaseBrush {
     if (this.weight < 0.02) return
 
     const intensity = clamp(audio.energy * 1.1 + audio.mid * 0.35, 0, 1)
-    const interval = lerp(190, 55, intensity)
-    this.spawnClock += dt * (0.45 + this.weight)
+    const minRate = 1000 / 190
+    const maxRate = 1000 / 55
+    const targetRate = lerp(minRate, maxRate, intensity) * (0.45 + this.weight)
+    this.advanceSpawn(dt, targetRate)
 
-    while (this.spawnClock >= interval) {
-      this.spawnClock -= interval
+    while (this.spawnAcc >= 1) {
+      this.spawnAcc -= 1
       const t = this.elapsed
       const jitter = 0.02 + audio.high * 0.08
       const drawPos = pos
@@ -406,7 +422,10 @@ class TubeBrush extends BaseBrush {
       }
 
       const bloomGate = smoothNoise(t * 0.45, this.seed + 5.7) + intensity * 0.55
-      if (bloomGate > 0.9) {
+      const bloomStrength = clamp(bloomGate, 0, 1)
+      this.bloomAcc += bloomStrength * (dt * 0.001) * 1.4
+      while (this.bloomAcc >= 1) {
+        this.bloomAcc -= 1
         const bloomCount = 3 + Math.floor(smoothNoise(t, this.seed + 9.1) * 3)
         for (let i = 0; i < bloomCount; i += 1) {
           const angle = (i / bloomCount) * TAU
@@ -551,8 +570,8 @@ export class AutoProgramManager {
     this.elapsed += dt
 
     const current = this.programs[this.index]
-    const boost = audioEnergy > 0.45 ? -2500 : 0
-    const duration = current.duration + boost
+    const energyLift = clamp(audioEnergy * 0.9, 0, 1)
+    const duration = current.duration + lerp(0, -2500, energyLift)
 
     if (this.elapsed >= duration) {
       this.elapsed = 0

@@ -27,8 +27,10 @@ AFRAME.registerComponent('brush-rig', {
     this.dirUp = new THREE.Vector3()
 
     this.drawDist = DRAW_BASE_DIST
+    this.drawDistTarget = DRAW_BASE_DIST
     this.pitch = 0
     this.roll = 0
+    this.audioSmooth = { low: 0, mid: 0, high: 0, energy: 0 }
 
     this.brushManager = new BrushManager(this.world)
     this.brushManager.addSlot({
@@ -82,9 +84,15 @@ AFRAME.registerComponent('brush-rig', {
     const dts = dt * 0.001
     this.t += dts
 
-    const b = (this.analyser && this.fft)
+    const bandsRaw = (this.analyser && this.fft)
       ? readBands(this.analyser, this.fft)
       : { low: 0, mid: 0, high: 0, energy: 0 }
+    const audioBlend = 1 - Math.exp(-dt * 0.004)
+    this.audioSmooth.low = THREE.MathUtils.lerp(this.audioSmooth.low, bandsRaw.low, audioBlend)
+    this.audioSmooth.mid = THREE.MathUtils.lerp(this.audioSmooth.mid, bandsRaw.mid, audioBlend)
+    this.audioSmooth.high = THREE.MathUtils.lerp(this.audioSmooth.high, bandsRaw.high, audioBlend)
+    this.audioSmooth.energy = THREE.MathUtils.lerp(this.audioSmooth.energy, bandsRaw.energy, audioBlend)
+    const b = this.audioSmooth
 
     if (this.analyser) {
       const program = this.autoEnabled ? ` · ${this.autoManager.getCurrentName()}` : ''
@@ -126,7 +134,8 @@ AFRAME.registerComponent('brush-rig', {
     }
 
     // distance de dessin modulée par l’audio
-    this.drawDist = DRAW_BASE_DIST + b.mid * 0.9 - b.low * 0.35
+    this.drawDistTarget = DRAW_BASE_DIST + b.mid * 0.9 - b.low * 0.35
+    this.drawDist = THREE.MathUtils.lerp(this.drawDist, this.drawDistTarget, 0.04)
     if (this.cursor) {
       this.cursor.object3D.position.z = -this.drawDist
     }
