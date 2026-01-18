@@ -13,6 +13,7 @@ a-scene {
   width: 100vw;
   height: 100vh;
   display: block;
+  transition: opacity 0.25s ease;
 }
 
 @supports (height: 100dvh) {
@@ -35,6 +36,28 @@ a-scene canvas {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+#viewToggle {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  z-index: 10;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,0.2);
+  background: rgba(242,240,235,0.5);
+  font-size: 20px;
+  display: grid;
+  place-items: center;
+  opacity: 0.72;
+  backdrop-filter: blur(4px);
+  transform: translateX(-50%);
+}
+
+.view-toggle:active {
+  transform: translateX(-50%) scale(0.97);
 }
 
 #micBtn,
@@ -68,4 +91,8 @@ a-scene canvas {
 .a-enter-ar {
   right: 12px;
   bottom: 12px;
+}
+
+body.view-transition a-scene {
+  opacity: 0.35;
 }

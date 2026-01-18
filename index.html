@@ -15,6 +15,7 @@
     <button id="micBtn">🎤 MICRO</button>
     <button id="autoBtn">AUTO:ON</button>
   </div>
+  <button id="viewToggle" class="view-toggle" aria-label="Basculer la vue">👁</button>
   <div id="status">mic:off</div>
 
   <a-scene
@@ -22,6 +23,7 @@
     vr-mode-ui="enabled: true"
     device-orientation-permission-ui="enabled: true"
     renderer="antialias: true; colorManagement: true;"
+    view-switch
   >
     <!-- lumière douce -->
     <a-entity light="type: ambient; intensity: 0.9"></a-entity>
@@ -32,8 +34,10 @@
     <!-- caméra / pinceau -->
     <a-entity id="rig" brush-rig position="0 1.6 3.2">
       <a-camera
+        id="drawCam"
+        camera="active: true"
         wasd-controls-enabled="false"
-        look-controls="enabled: true"
+        look-controls="enabled: false"
         fov="62"
       >
         <!-- repère discret du point de dessin -->
@@ -45,6 +49,14 @@
         ></a-entity>
       </a-camera>
     </a-entity>
+
+    <a-entity
+      id="previewCam"
+      camera="active: false"
+      position="0 1.6 5"
+      look-controls="enabled: false"
+      tpv-controls
+    ></a-entity>
   </a-scene>
 </body>
 </html>

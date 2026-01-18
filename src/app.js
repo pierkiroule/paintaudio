@@ -27,6 +27,8 @@ AFRAME.registerComponent('brush-rig', {
     this.dirUp = new THREE.Vector3()
 
     this.drawDist = DRAW_BASE_DIST
+    this.pitch = 0
+    this.roll = 0
 
     this.brushManager = new BrushManager(this.world)
     this.brushManager.addSlot({
@@ -51,6 +53,7 @@ AFRAME.registerComponent('brush-rig', {
     this.autoManager = new AutoProgramManager(this.brushManager)
     this.autoManager.applyProgram(0)
     this.autoEnabled = true
+    this.drawingEnabled = true
 
     const micBtn = document.getElementById('micBtn')
     micBtn.addEventListener('click', async () => {
@@ -64,10 +67,15 @@ AFRAME.registerComponent('brush-rig', {
     if (this.autoBtn) {
       this.autoBtn.addEventListener('click', () => {
         this.autoEnabled = !this.autoEnabled
-        this.autoManager.setEnabled(this.autoEnabled)
+        this.autoManager.setEnabled(this.autoEnabled && this.drawingEnabled)
         this.autoBtn.textContent = this.autoEnabled ? 'AUTO:ON' : 'AUTO:OFF'
       })
     }
+  },
+
+  setDrawingEnabled(enabled) {
+    this.drawingEnabled = enabled
+    this.autoManager.setEnabled(enabled && this.autoEnabled)
   },
 
   tick(t, dt) {
@@ -81,6 +89,10 @@ AFRAME.registerComponent('brush-rig', {
     if (this.analyser) {
       const program = this.autoEnabled ? ` · ${this.autoManager.getCurrentName()}` : ''
       this.status.textContent = `mic:on ${b.energy.toFixed(2)}${program}`
+    }
+
+    if (!this.drawingEnabled) {
+      return
     }
 
     // mouvement caméra lent et stable
@@ -101,6 +113,16 @@ AFRAME.registerComponent('brush-rig', {
 
     // orientation douce (pas de lookAt brutal)
     this.el.object3D.rotation.y += Math.sin(this.t * 0.1) * 0.0006
+
+    const rotBlend = 1 - Math.exp(-dt * 0.0025)
+    const pitchTarget = Math.sin(this.t * 0.12) * 0.18 + Math.sin(this.t * 0.32) * 0.08
+    const rollTarget = Math.cos(this.t * 0.17) * 0.08
+    this.pitch = THREE.MathUtils.lerp(this.pitch, pitchTarget, rotBlend)
+    this.roll = THREE.MathUtils.lerp(this.roll, rollTarget, rotBlend)
+    if (this.camera) {
+      this.camera.object3D.rotation.x = this.pitch
+      this.camera.object3D.rotation.z = this.roll
+    }
 
     // distance de dessin modulée par l’audio
     this.drawDist = DRAW_BASE_DIST + b.mid * 0.6 - b.low * 0.3
@@ -127,5 +149,262 @@ AFRAME.registerComponent('brush-rig', {
       this.dirRight,
       this.dirUp
     )
+  }
+})
+
+AFRAME.registerComponent('tpv-controls', {
+  schema: {
+    enabled: { default: false },
+    minPolar: { default: -0.45 },
+    maxPolar: { default: 0.45 },
+    minRadius: { default: 2.2 },
+    maxRadius: { default: 10 }
+  },
+
+  init() {
+    this.target = new THREE.Vector3()
+    this.current = { yaw: 0, pitch: 0.1, radius: 5 }
+    this.desired = { yaw: 0, pitch: 0.1, radius: 5 }
+    this.dragging = false
+    this.pointerPositions = new Map()
+    this.lastPinchDistance = null
+    this.lastInteraction = performance.now()
+
+    this.onPointerDown = this.onPointerDown.bind(this)
+    this.onPointerMove = this.onPointerMove.bind(this)
+    this.onPointerUp = this.onPointerUp.bind(this)
+    this.onWheel = this.onWheel.bind(this)
+
+    if (this.el.sceneEl?.canvas) {
+      this.attachEvents()
+    } else {
+      this.el.sceneEl?.addEventListener('render-target-loaded', () => {
+        this.attachEvents()
+      })
+    }
+  },
+
+  attachEvents() {
+    const canvas = this.el.sceneEl?.canvas
+    if (!canvas) return
+
+    canvas.addEventListener('pointerdown', this.onPointerDown, { passive: true })
+    canvas.addEventListener('pointermove', this.onPointerMove, { passive: true })
+    canvas.addEventListener('pointerup', this.onPointerUp, { passive: true })
+    canvas.addEventListener('pointercancel', this.onPointerUp, { passive: true })
+    canvas.addEventListener('wheel', this.onWheel, { passive: true })
+  },
+
+  setTarget(target, radius) {
+    this.target.copy(target)
+    if (typeof radius === 'number') {
+      this.current.radius = radius
+      this.desired.radius = radius
+    }
+  },
+
+  setEnabled(enabled) {
+    this.data.enabled = enabled
+    if (!enabled) {
+      this.dragging = false
+      this.pointerPositions.clear()
+      this.lastPinchDistance = null
+    }
+  },
+
+  onPointerDown(event) {
+    if (!this.data.enabled) return
+    this.el.sceneEl?.canvas?.setPointerCapture(event.pointerId)
+    this.pointerPositions.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    this.dragging = true
+    this.lastInteraction = performance.now()
+  },
+
+  onPointerMove(event) {
+    if (!this.data.enabled || !this.pointerPositions.has(event.pointerId)) return
+
+    const prev = this.pointerPositions.get(event.pointerId)
+    const next = { x: event.clientX, y: event.clientY }
+    this.pointerPositions.set(event.pointerId, next)
+    this.lastInteraction = performance.now()
+
+    if (this.pointerPositions.size === 2) {
+      const points = Array.from(this.pointerPositions.values())
+      const dx = points[0].x - points[1].x
+      const dy = points[0].y - points[1].y
+      const distance = Math.hypot(dx, dy)
+      if (this.lastPinchDistance != null) {
+        const delta = distance - this.lastPinchDistance
+        this.desired.radius = THREE.MathUtils.clamp(
+          this.desired.radius - delta * 0.01,
+          this.data.minRadius,
+          this.data.maxRadius
+        )
+      }
+      this.lastPinchDistance = distance
+      return
+    }
+
+    if (!prev) return
+    const dx = next.x - prev.x
+    const dy = next.y - prev.y
+    this.desired.yaw -= dx * 0.005
+    this.desired.pitch = THREE.MathUtils.clamp(
+      this.desired.pitch - dy * 0.004,
+      this.data.minPolar,
+      this.data.maxPolar
+    )
+  },
+
+  onPointerUp(event) {
+    if (!this.pointerPositions.has(event.pointerId)) return
+    this.pointerPositions.delete(event.pointerId)
+    if (this.pointerPositions.size < 2) {
+      this.lastPinchDistance = null
+    }
+    if (this.pointerPositions.size === 0) {
+      this.dragging = false
+    }
+  },
+
+  onWheel(event) {
+    if (!this.data.enabled) return
+    this.desired.radius = THREE.MathUtils.clamp(
+      this.desired.radius + event.deltaY * 0.002,
+      this.data.minRadius,
+      this.data.maxRadius
+    )
+    this.lastInteraction = performance.now()
+  },
+
+  tick(time, dt) {
+    if (!this.data.enabled) return
+
+    const now = performance.now()
+    if (!this.dragging && now - this.lastInteraction > 1600) {
+      this.desired.yaw += dt * 0.00012
+    }
+
+    const smoothing = 1 - Math.exp(-dt * 0.01)
+    this.current.yaw = THREE.MathUtils.lerp(this.current.yaw, this.desired.yaw, smoothing)
+    this.current.pitch = THREE.MathUtils.lerp(this.current.pitch, this.desired.pitch, smoothing)
+    this.current.radius = THREE.MathUtils.lerp(this.current.radius, this.desired.radius, smoothing)
+
+    const phi = Math.PI * 0.5 - this.current.pitch
+    const theta = this.current.yaw
+    const pos = new THREE.Vector3()
+    pos.setFromSphericalCoords(this.current.radius, phi, theta)
+    pos.add(this.target)
+
+    this.el.object3D.position.copy(pos)
+    this.el.object3D.lookAt(this.target)
+  }
+})
+
+AFRAME.registerComponent('view-switch', {
+  init() {
+    this.world = document.getElementById('world')
+    this.rig = document.getElementById('rig')
+    this.drawCam = document.getElementById('drawCam')
+    this.previewCam = document.getElementById('previewCam')
+    this.toggleBtn = document.getElementById('viewToggle')
+    this.scene = this.el.sceneEl
+
+    this.mode = null
+    this.worldBasePos = this.world.object3D.position.clone()
+    this.worldOffset = new THREE.Vector3()
+    this.worldBox = new THREE.Box3()
+    this.worldSize = new THREE.Vector3()
+    this.worldCenter = new THREE.Vector3()
+    this.tpvTarget = new THREE.Vector3()
+
+    this.setViewMode = this.setViewMode.bind(this)
+
+    if (this.toggleBtn) {
+      this.toggleBtn.addEventListener('click', () => {
+        const next = this.mode === 'fpv' ? 'tpv' : 'fpv'
+        this.setViewMode(next)
+      })
+    }
+
+    this.setViewMode('fpv', { immediate: true })
+    window.setViewMode = this.setViewMode
+  },
+
+  setViewMode(mode, { immediate = false } = {}) {
+    if (mode === this.mode) return
+    const applyMode = () => {
+      const enableTpv = mode === 'tpv'
+      this.mode = mode
+
+      if (enableTpv) {
+        this.centerWorldForPreview()
+        this.drawCam.setAttribute('camera', { active: false })
+        this.previewCam.setAttribute('camera', { active: true })
+      } else {
+        this.restoreWorldCenter()
+        this.drawCam.setAttribute('camera', { active: true })
+        this.previewCam.setAttribute('camera', { active: false })
+      }
+
+      const rigComponent = this.rig?.components['brush-rig']
+      if (rigComponent) {
+        rigComponent.setDrawingEnabled(!enableTpv)
+      }
+
+      const tpvControls = this.previewCam?.components['tpv-controls']
+      if (tpvControls) {
+        tpvControls.setEnabled(enableTpv)
+      }
+
+      if (this.toggleBtn) {
+        this.toggleBtn.textContent = enableTpv ? '🧿' : '👁'
+        this.toggleBtn.setAttribute('aria-pressed', enableTpv ? 'true' : 'false')
+      }
+    }
+
+    if (immediate) {
+      applyMode()
+      return
+    }
+
+    document.body.classList.add('view-transition')
+    setTimeout(() => {
+      applyMode()
+      setTimeout(() => {
+        document.body.classList.remove('view-transition')
+      }, 180)
+    }, 120)
+  },
+
+  centerWorldForPreview() {
+    this.worldBox.setFromObject(this.world.object3D)
+    if (this.worldBox.isEmpty()) {
+      this.worldCenter.set(0, 0, 0)
+      this.worldSize.set(1, 1, 1)
+    } else {
+      this.worldBox.getCenter(this.worldCenter)
+      this.worldBox.getSize(this.worldSize)
+    }
+
+    this.worldOffset.copy(this.worldCenter)
+    this.world.object3D.position.copy(this.worldBasePos).sub(this.worldOffset)
+
+    const radius = Math.max(this.worldSize.x, this.worldSize.y, this.worldSize.z)
+    const distance = THREE.MathUtils.clamp(radius * 2.2, 2.8, 9)
+    const targetY = this.worldSize.y * 0.12
+    this.tpvTarget.set(0, targetY, 0)
+
+    const tpvControls = this.previewCam?.components['tpv-controls']
+    if (tpvControls) {
+      tpvControls.setTarget(this.tpvTarget, distance)
+    } else {
+      this.previewCam.object3D.position.set(0, targetY, distance)
+      this.previewCam.object3D.lookAt(this.tpvTarget)
+    }
+  },
+
+  restoreWorldCenter() {
+    this.world.object3D.position.copy(this.worldBasePos)
   }
 })
