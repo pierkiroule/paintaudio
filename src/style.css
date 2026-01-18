@@ -38,11 +38,19 @@ a-scene canvas {
   flex-wrap: wrap;
 }
 
-#viewToggle {
+#viewControls {
   position: fixed;
   top: 12px;
   left: 50%;
   z-index: 10;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  transform: translateX(-50%);
+}
+
+.view-toggle,
+.mode-toggle {
   width: 44px;
   height: 44px;
   border-radius: 999px;
@@ -53,11 +61,22 @@ a-scene canvas {
   place-items: center;
   opacity: 0.72;
   backdrop-filter: blur(4px);
-  transform: translateX(-50%);
 }
 
-.view-toggle:active {
-  transform: translateX(-50%) scale(0.97);
+.mode-toggle {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.view-toggle:active,
+.mode-toggle:active {
+  transform: scale(0.97);
+}
+
+#viewControls button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 #micBtn {
