@@ -32,9 +32,9 @@ AFRAME.registerComponent('brush-rig', {
 
     this.ribbon = new BrushRibbon({
       world: this.world,
-      maxControlPoints: 5,
-      sampleCount: 40,
-      baseWidth: 0.06,
+      maxControlPoints: 6,
+      sampleCount: 50,
+      baseWidth: 0.08,
       baseOpacity: 0.1
     })
     this.drawingEnabled = true
