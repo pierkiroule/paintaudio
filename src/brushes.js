@@ -80,6 +80,11 @@ class BaseBrush {
 }
 
 class InkBrush extends BaseBrush {
+  constructor(opts) {
+    super(opts)
+    this.lastPos = null
+  }
+
   update(audio, time, dt, pos, dir, right, up) {
     this.elapsed += dt * 0.001
     this.updateWeight(dt)
@@ -103,6 +108,9 @@ class InkBrush extends BaseBrush {
       offset.addScaledVector(up, noiseSigned(t, this.seed + 3.1) * jitterAmt)
 
       const drawPos = pos.clone().add(offset)
+      if (!this.lastPos) {
+        this.lastPos = drawPos.clone()
+      }
 
       const thickness = 0.008 + audio.mid * 0.04
       const length = 0.09 + density * 0.18
@@ -118,35 +126,50 @@ class InkBrush extends BaseBrush {
         0.8
       ) * this.weight
 
-      const e = document.createElement('a-entity')
-      e.setAttribute(
-        'geometry',
-        `primitive: cylinder; radius: ${thickness}; height: ${length}; segmentsRadial: 10; segmentsHeight: 1`
-      )
-      e.setAttribute('material', {
-        color: paint.color,
-        opacity,
-        shader: 'standard',
-        roughness: 0.55,
-        metalness: 0.1,
-        emissive: paint.emissive,
-        emissiveIntensity: 0.3,
-        transparent: true,
-        depthWrite: false
-      })
+      const segmentStart = this.lastPos.clone()
+      const segmentEnd = drawPos.clone()
+      const segmentDir = segmentEnd.clone().sub(segmentStart)
+      const segmentDist = segmentDir.length()
+      if (segmentDist > 0.004) {
+        const segmentCount = Math.max(1, Math.ceil(segmentDist / (length * 0.75)))
+        const step = segmentDir.clone().multiplyScalar(1 / segmentCount)
+        for (let i = 0; i < segmentCount; i += 1) {
+          const a = segmentStart.clone().addScaledVector(step, i)
+          const b = segmentStart.clone().addScaledVector(step, i + 1)
+          const mid = a.clone().add(b).multiplyScalar(0.5)
+          const e = document.createElement('a-entity')
+          const pieceLen = Math.max(length * 0.65, a.distanceTo(b) + thickness * 0.8)
+          e.setAttribute(
+            'geometry',
+            `primitive: cylinder; radius: ${thickness}; height: ${pieceLen}; segmentsRadial: 12; segmentsHeight: 1`
+          )
+          e.setAttribute('material', {
+            color: paint.color,
+            opacity,
+            shader: 'standard',
+            roughness: 0.55,
+            metalness: 0.1,
+            emissive: paint.emissive,
+            emissiveIntensity: 0.3,
+            transparent: true,
+            depthWrite: false
+          })
 
-      e.object3D.position.copy(drawPos)
-      const quat = new THREE.Quaternion()
-      quat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize())
-      e.object3D.quaternion.copy(quat)
+          e.object3D.position.copy(mid)
+          const quat = new THREE.Quaternion()
+          quat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize())
+          e.object3D.quaternion.copy(quat)
 
-      e.setAttribute(
-        'animation__fade',
-        `property: material.opacity; to: 0.02; dur: 120000; easing: easeOutQuad`
-      )
+          e.setAttribute(
+            'animation__fade',
+            `property: material.opacity; to: 0.02; dur: 120000; easing: easeOutQuad`
+          )
 
-      this.world.appendChild(e)
-      this.addStroke(e)
+          this.world.appendChild(e)
+          this.addStroke(e)
+        }
+      }
+      this.lastPos.copy(drawPos)
     }
   }
 }
@@ -296,10 +319,117 @@ class GlowBrush extends BaseBrush {
   }
 }
 
+class TubeBrush extends BaseBrush {
+  constructor(opts) {
+    super(opts)
+    this.lastPos = null
+  }
+
+  spawnTubeSegment(start, end, paint, radius, opacity) {
+    const dir = end.clone().sub(start)
+    const distance = dir.length()
+    if (distance < 0.004) return
+
+    const mid = start.clone().add(end).multiplyScalar(0.5)
+    const e = document.createElement('a-entity')
+    const pieceLen = distance + radius * 1.2
+    e.setAttribute(
+      'geometry',
+      `primitive: cylinder; radius: ${radius}; height: ${pieceLen}; segmentsRadial: 14; segmentsHeight: 1`
+    )
+    e.setAttribute('material', {
+      color: paint.color,
+      opacity,
+      shader: 'standard',
+      roughness: 0.28,
+      metalness: 0.18,
+      emissive: paint.emissive,
+      emissiveIntensity: 0.65,
+      transparent: true,
+      depthWrite: false
+    })
+
+    e.object3D.position.copy(mid)
+    const quat = new THREE.Quaternion()
+    quat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize())
+    e.object3D.quaternion.copy(quat)
+
+    e.setAttribute(
+      'animation__fade',
+      `property: material.opacity; to: 0.02; dur: 130000; easing: easeOutQuad`
+    )
+
+    this.world.appendChild(e)
+    this.addStroke(e)
+  }
+
+  update(audio, time, dt, pos, dir, right, up) {
+    this.elapsed += dt * 0.001
+    this.updateWeight(dt)
+    if (this.weight < 0.02) return
+
+    const intensity = clamp(audio.energy * 1.1 + audio.mid * 0.35, 0, 1)
+    const interval = lerp(190, 55, intensity)
+    this.spawnClock += dt * (0.45 + this.weight)
+
+    while (this.spawnClock >= interval) {
+      this.spawnClock -= interval
+      const t = this.elapsed
+      const jitter = 0.02 + audio.high * 0.08
+      const drawPos = pos
+        .clone()
+        .addScaledVector(right, noiseSigned(t, this.seed + 2.2) * jitter)
+        .addScaledVector(up, noiseSigned(t, this.seed + 3.5) * jitter)
+
+      if (!this.lastPos) {
+        this.lastPos = drawPos.clone()
+      }
+
+      const paint = palette(
+        { low: audio.low, mid: audio.mid, high: audio.high, energy: audio.energy },
+        this.hueShift + 8,
+        0.22
+      )
+      const opacity = clamp(0.28 + intensity * 0.5, 0.24, 0.85) * this.weight
+      const radius = 0.012 + audio.low * 0.04
+
+      const segmentDir = drawPos.clone().sub(this.lastPos)
+      const distance = segmentDir.length()
+      if (distance > 0.01) {
+        const segmentCount = Math.max(1, Math.ceil(distance / 0.14))
+        const step = segmentDir.clone().multiplyScalar(1 / segmentCount)
+        for (let i = 0; i < segmentCount; i += 1) {
+          const a = this.lastPos.clone().addScaledVector(step, i)
+          const b = this.lastPos.clone().addScaledVector(step, i + 1)
+          this.spawnTubeSegment(a, b, paint, radius, opacity)
+        }
+      }
+
+      const bloomGate = smoothNoise(t * 0.45, this.seed + 5.7) + intensity * 0.55
+      if (bloomGate > 0.9) {
+        const bloomCount = 3 + Math.floor(smoothNoise(t, this.seed + 9.1) * 3)
+        for (let i = 0; i < bloomCount; i += 1) {
+          const angle = (i / bloomCount) * TAU
+          const spread = 0.08 + audio.high * 0.16
+          const offset = new THREE.Vector3()
+            .addScaledVector(right, Math.cos(angle) * spread)
+            .addScaledVector(up, Math.sin(angle) * spread)
+          const bloomStart = drawPos.clone().add(offset)
+          const bloomEnd = bloomStart.clone().addScaledVector(dir, 0.16 + audio.mid * 0.25)
+          this.spawnTubeSegment(bloomStart, bloomEnd, paint, radius * 1.4, opacity)
+        }
+      }
+
+      this.lastPos.copy(drawPos)
+    }
+  }
+}
+
 export const BRUSH_TYPES = {
   ink: InkBrush,
   bubbles: BubbleBrush,
-  glow: GlowBrush
+  glow: GlowBrush,
+  tubes: TubeBrush
 }
 
 export class BrushManager {
@@ -396,6 +526,16 @@ export class AutoProgramManager {
         name: 'Respiration lente',
         duration: 20000,
         slots: ['bubbles', 'ink', 'bubbles']
+      },
+      {
+        name: 'Tube solaire',
+        duration: 17000,
+        slots: ['tubes', 'glow', 'tubes']
+      },
+      {
+        name: 'Filaments organiques',
+        duration: 19000,
+        slots: ['ink', 'tubes', 'glow']
       }
     ]
     this.index = 0
