@@ -2,6 +2,8 @@ const TAU = Math.PI * 2
 
 const clamp = (val, min, max) => Math.min(max, Math.max(min, val))
 const lerp = (a, b, t) => a + (b - a) * t
+const toVec3 = (v) => `${v.x.toFixed(4)} ${v.y.toFixed(4)} ${v.z.toFixed(4)}`
+const deg = (radians) => (radians * 180) / Math.PI
 
 function smoothNoise(t, seed) {
   const a = Math.sin(t * 0.6 + seed) * 0.6
@@ -37,6 +39,41 @@ function palette(bands, hueShift = 0, energyBoost = 0) {
   const emissive = `#${emissiveObj.getHexString()}`
   const opacity = 0.3 + energy * 0.4
   return { color, emissive, opacity }
+}
+
+function applyVibration(entity, basePos, intensity, seed) {
+  const amp = clamp(intensity, 0.002, 0.05)
+  const offset = new THREE.Vector3(
+    noiseSigned(seed * 1.3, seed + 1.1) * amp,
+    noiseSigned(seed * 1.7, seed + 2.4) * amp,
+    noiseSigned(seed * 2.1, seed + 3.6) * amp
+  )
+  const to = basePos.clone().add(offset)
+  const duration = 700 + smoothNoise(seed * 0.3, seed + 4.8) * 1100
+  entity.setAttribute(
+    'animation__vibrate',
+    `property: position; to: ${toVec3(to)}; dir: alternate; dur: ${Math.round(duration)}; easing: easeInOutSine; loop: true`
+  )
+
+  const rot = {
+    x: deg(entity.object3D.rotation.x) + noiseSigned(seed + 5.1, seed + 6.7) * 4.5,
+    y: deg(entity.object3D.rotation.y) + noiseSigned(seed + 7.3, seed + 8.9) * 5,
+    z: deg(entity.object3D.rotation.z) + noiseSigned(seed + 9.2, seed + 10.1) * 4
+  }
+  entity.setAttribute(
+    'animation__twist',
+    `property: rotation; to: ${rot.x.toFixed(2)} ${rot.y.toFixed(2)} ${rot.z.toFixed(2)}; dir: alternate; dur: ${Math.round(duration * 1.3)}; easing: easeInOutSine; loop: true`
+  )
+}
+
+function applyPulse(entity, baseScale, amount, seed) {
+  const pulse = clamp(amount, 0.02, 0.4)
+  const target = baseScale.clone().multiplyScalar(1 + pulse)
+  const duration = 1100 + smoothNoise(seed * 0.2, seed + 4.2) * 1600
+  entity.setAttribute(
+    'animation__pulse',
+    `property: scale; to: ${toVec3(target)}; dir: alternate; dur: ${Math.round(duration)}; easing: easeInOutSine; loop: true`
+  )
 }
 
 class BaseBrush {
@@ -90,6 +127,56 @@ class InkBrush extends BaseBrush {
   constructor(opts) {
     super(opts)
     this.lastPos = null
+    this.splashAcc = 0
+  }
+
+  spawnSplash(audio, drawPos, dir, right, up) {
+    const t = this.elapsed
+    const splash = document.createElement('a-entity')
+    const height = 0.06 + audio.high * 0.08
+    const radiusBottom = 0.012 + audio.high * 0.016
+    const radiusTop = radiusBottom * 0.2
+    splash.setAttribute(
+      'geometry',
+      `primitive: cone; radiusBottom: ${radiusBottom}; radiusTop: ${radiusTop}; height: ${height}; segmentsRadial: 10`
+    )
+    splash.setAttribute('material', {
+      color: '#0b0b0b',
+      opacity: clamp(0.5 + audio.high * 0.35, 0.45, 0.85),
+      shader: 'standard',
+      roughness: 0.85,
+      metalness: 0.05,
+      emissive: '#000000',
+      emissiveIntensity: 0,
+      transparent: true,
+      depthWrite: false
+    })
+
+    const splashOffset = new THREE.Vector3()
+      .addScaledVector(right, noiseSigned(t, this.seed + 11.1) * 0.08)
+      .addScaledVector(up, noiseSigned(t, this.seed + 12.7) * 0.08)
+      .addScaledVector(dir, 0.1 + audio.high * 0.12)
+    const splashPos = drawPos.clone().add(splashOffset)
+    splash.object3D.position.copy(splashPos)
+
+    const dripOffset = splashPos.clone().addScaledVector(up, -0.4 - audio.high * 0.6)
+    splash.setAttribute(
+      'animation__drip',
+      `property: position; to: ${toVec3(dripOffset)}; dur: 12000; easing: easeInQuad`
+    )
+    splash.setAttribute(
+      'animation__taper',
+      `property: scale; to: 0.15 1.6 0.15; dur: 16000; easing: easeOutQuad`
+    )
+    splash.setAttribute(
+      'animation__fade',
+      `property: material.opacity; to: 0.0; dur: 22000; easing: easeOutQuad`
+    )
+
+    applyVibration(splash, splashPos, 0.02 + audio.high * 0.04, this.seed + t)
+
+    this.world.appendChild(splash)
+    this.addStroke(splash)
   }
 
   update(audio, time, dt, pos, dir, right, up) {
@@ -169,6 +256,10 @@ class InkBrush extends BaseBrush {
           quat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize())
           e.object3D.quaternion.copy(quat)
 
+          if (audio.energy > 0.15 || Math.random() < 0.4) {
+            applyVibration(e, mid, 0.01 + audio.high * 0.03, this.seed + t + i)
+          }
+
           e.setAttribute(
             'animation__fade',
             `property: material.opacity; to: 0.02; dur: 120000; easing: easeOutQuad`
@@ -179,6 +270,16 @@ class InkBrush extends BaseBrush {
         }
       }
       this.lastPos.copy(drawPos)
+
+      const splashGate = clamp((audio.high - 0.55) * 2.2 + audio.energy * 0.6, 0, 1)
+      this.splashAcc += splashGate * (dt * 0.001) * 2.1
+      if (this.splashAcc >= 1) {
+        this.splashAcc -= 1
+        const splashCount = 1 + Math.floor(smoothNoise(t, this.seed + 13.4) * 2)
+        for (let i = 0; i < splashCount; i += 1) {
+          this.spawnSplash(audio, drawPos, dir, right, up)
+        }
+      }
     }
   }
 }
@@ -244,6 +345,11 @@ class BubbleBrush extends BaseBrush {
 
       e.object3D.position.copy(drawPos)
       e.object3D.scale.setScalar(size)
+
+      if (audio.energy > 0.1 || Math.random() < 0.35) {
+        applyVibration(e, drawPos, 0.008 + audio.high * 0.03, this.seed + t)
+      }
+      applyPulse(e, new THREE.Vector3(size, size, size), 0.12 + audio.mid * 0.35, this.seed + 0.8)
 
       const floatOffset = 0.18 + audio.low * 0.32
       const floatDuration = 5200 + smoothNoise(t, this.seed + 4.1) * 2100
@@ -321,6 +427,11 @@ class GlowBrush extends BaseBrush {
       e.object3D.position.copy(drawPos)
       e.object3D.scale.setScalar(size)
 
+      if (audio.energy > 0.1 || Math.random() < 0.4) {
+        applyVibration(e, drawPos, 0.01 + audio.high * 0.03, this.seed + t)
+      }
+      applyPulse(e, new THREE.Vector3(size, size, size), 0.18 + audio.energy * 0.5, this.seed + 1.6)
+
       e.setAttribute(
         'animation__fade',
         `property: material.opacity; to: 0.04; dur: 110000; easing: easeOutQuad`
@@ -339,7 +450,7 @@ class TubeBrush extends BaseBrush {
     this.bloomAcc = 0
   }
 
-  spawnTubeSegment(start, end, paint, radius, opacity) {
+  spawnTubeSegment(start, end, paint, radius, opacity, audio, seed) {
     const dir = end.clone().sub(start)
     const distance = dir.length()
     if (distance < 0.004) return
@@ -367,6 +478,10 @@ class TubeBrush extends BaseBrush {
     const quat = new THREE.Quaternion()
     quat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize())
     e.object3D.quaternion.copy(quat)
+
+    if (audio && (audio.energy > 0.2 || Math.random() < 0.2)) {
+      applyVibration(e, mid, 0.006 + audio.high * 0.02, seed)
+    }
 
     e.setAttribute(
       'animation__fade',
@@ -417,7 +532,7 @@ class TubeBrush extends BaseBrush {
         for (let i = 0; i < segmentCount; i += 1) {
           const a = this.lastPos.clone().addScaledVector(step, i)
           const b = this.lastPos.clone().addScaledVector(step, i + 1)
-          this.spawnTubeSegment(a, b, paint, radius, opacity)
+          this.spawnTubeSegment(a, b, paint, radius, opacity, audio, this.seed + t + i)
         }
       }
 
@@ -435,7 +550,15 @@ class TubeBrush extends BaseBrush {
             .addScaledVector(up, Math.sin(angle) * spread)
           const bloomStart = drawPos.clone().add(offset)
           const bloomEnd = bloomStart.clone().addScaledVector(dir, 0.16 + audio.mid * 0.25)
-          this.spawnTubeSegment(bloomStart, bloomEnd, paint, radius * 1.4, opacity)
+          this.spawnTubeSegment(
+            bloomStart,
+            bloomEnd,
+            paint,
+            radius * 1.4,
+            opacity,
+            audio,
+            this.seed + t + i * 2.1
+          )
         }
       }
 
@@ -501,25 +624,37 @@ export class BrushManager {
     this.slots.forEach((slot, index) => {
       const audioLift = audio.mid * 0.75 - audio.low * 0.35 + audio.energy * 0.25
       const slotDist = slot.distance + audioLift
+      const timeSec = time * 0.001
+      const symmetrySignal = clamp(
+        (Math.sin(timeSec * 0.35 + index * 1.2) + 1) * 0.4 + audio.high * 0.55 + audio.energy * 0.35,
+        0,
+        1
+      )
+      const symmetryCount = symmetrySignal > 0.65 ? 3 + Math.floor(symmetrySignal * 3) : 1
+      for (let i = 0; i < symmetryCount; i += 1) {
+        const angle = (i / symmetryCount) * TAU
+        const rot = new THREE.Quaternion().setFromAxisAngle(forward, angle)
+        const radialRight = right.clone().applyQuaternion(rot)
+        const radialUp = up.clone().applyQuaternion(rot)
+        const drawPos = camPos
+          .clone()
+          .addScaledVector(forward, slotDist)
+          .addScaledVector(radialRight, slot.offset.x)
+          .addScaledVector(radialUp, slot.offset.y)
 
-      const drawPos = camPos
-        .clone()
-        .addScaledVector(forward, slotDist)
-        .addScaledVector(right, slot.offset.x)
-        .addScaledVector(up, slot.offset.y)
+        if (slot.current) {
+          slot.current.update(audio, time, dt, drawPos, forward, radialRight, radialUp)
+          if (slot.next) {
+            slot.next.update(audio, time, dt, drawPos, forward, radialRight, radialUp)
+          }
 
-      if (slot.current) {
-        slot.current.update(audio, time, dt, drawPos, forward, right, up)
-        if (slot.next) {
-          slot.next.update(audio, time, dt, drawPos, forward, right, up)
-        }
-
-        if (slot.current.isFadedOut() && slot.next) {
-          slot.current.dispose()
-          slot.current = slot.next
-          slot.type = slot.nextType
-          slot.next = null
-          slot.nextType = null
+          if (slot.current.isFadedOut() && slot.next) {
+            slot.current.dispose()
+            slot.current = slot.next
+            slot.type = slot.nextType
+            slot.next = null
+            slot.nextType = null
+          }
         }
       }
     })
