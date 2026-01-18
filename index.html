@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Sumi 3D – A-Frame</title>
+
+  <link rel="stylesheet" href="/src/style.css" />
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script type="module" src="/src/app.js"></script>
+</head>
+
+<body>
+  <div id="ui">
+    <button id="micBtn">🎤 MICRO</button>
+    <div id="status">mic:off</div>
+  </div>
+
+  <a-scene
+    background="color: #f2f0eb"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false"
+    renderer="antialias: true; colorManagement: true;"
+  >
+    <!-- lumière douce -->
+    <a-entity light="type: ambient; intensity: 0.9"></a-entity>
+
+    <!-- monde -->
+    <a-entity id="world"></a-entity>
+
+    <!-- caméra / pinceau -->
+    <a-entity id="rig" brush-rig position="0 1.6 3.2">
+      <a-camera
+        wasd-controls-enabled="false"
+        look-controls="enabled: false"
+        fov="62"
+      ></a-camera>
+
+      <!-- repère discret du point de dessin -->
+      <a-entity
+        id="drawCursor"
+        geometry="primitive: sphere; radius: 0.04"
+        material="color: #111; opacity: 0.15; transparent: true; depthWrite: false"
+        position="0 0 -1.1"
+      ></a-entity>
+    </a-entity>
+  </a-scene>
+</body>
+</html>

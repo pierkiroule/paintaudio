@@ -1,0 +1,36 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #f2f0eb;
+  font-family: ui-serif, Georgia, serif;
+}
+
+#ui {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+}
+
+#micBtn {
+  padding: 12px 18px;
+  border-radius: 999px;
+  border: 2px solid #111;
+  background: rgba(242,240,235,0.7);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+#status {
+  font-size: 12px;
+  opacity: 0.7;
+  background: rgba(242,240,235,0.6);
+  border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 999px;
+  padding: 8px 12px;
+}
