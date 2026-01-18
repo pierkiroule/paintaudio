@@ -326,6 +326,7 @@ AFRAME.registerComponent('view-switch', {
     this.world = document.getElementById('world')
     this.rig = document.getElementById('rig')
     this.drawCam = document.getElementById('drawCam')
+    this.previewRig = document.getElementById('previewRig')
     this.previewCam = document.getElementById('previewCam')
     this.toggleBtn = document.getElementById('viewToggle')
     this.scene = this.el.sceneEl
@@ -372,7 +373,7 @@ AFRAME.registerComponent('view-switch', {
         rigComponent.setDrawingEnabled(!enableTpv)
       }
 
-      const tpvControls = this.previewCam?.components['tpv-controls']
+      const tpvControls = this.previewRig?.components['tpv-controls']
       if (tpvControls) {
         tpvControls.setEnabled(enableTpv)
       }
@@ -415,12 +416,12 @@ AFRAME.registerComponent('view-switch', {
     const targetY = this.worldSize.y * 0.12
     this.tpvTarget.set(0, targetY, 0)
 
-    const tpvControls = this.previewCam?.components['tpv-controls']
+    const tpvControls = this.previewRig?.components['tpv-controls']
     if (tpvControls) {
       tpvControls.setTarget(this.tpvTarget, distance)
     } else {
-      this.previewCam.object3D.position.set(0, targetY, distance)
-      this.previewCam.object3D.lookAt(this.tpvTarget)
+      this.previewRig.object3D.position.set(0, targetY, distance)
+      this.previewRig.object3D.lookAt(this.tpvTarget)
     }
   },
 
