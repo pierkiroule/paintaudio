@@ -1,6 +1,7 @@
 import { initMic, readBands } from './audio.js'
 
 const DRAW_BASE_DIST = 1.1  // distance devant la caméra
+const STROKE_LIFE_MS = 90000
 
 AFRAME.registerComponent('brush-rig', {
   init() {
@@ -17,7 +18,7 @@ AFRAME.registerComponent('brush-rig', {
     this.vel = new THREE.Vector3()
 
     this.drawDist = DRAW_BASE_DIST
-    this.maxStrokes = 200
+    this.maxStrokes = 420
     this.strokes = []
 
     const micBtn = document.getElementById('micBtn')
@@ -30,27 +31,61 @@ AFRAME.registerComponent('brush-rig', {
     })
   },
 
-  _spawnStroke(pos, size, opacity, color, lifeMs) {
+  _palette(bands) {
+    const clamp = (val, min, max) => Math.min(max, Math.max(min, val))
+    const low = clamp(bands.low, 0, 1)
+    const mid = clamp(bands.mid, 0, 1)
+    const high = clamp(bands.high, 0, 1)
+    const energy = clamp(bands.energy, 0, 1)
+
+    const weight = low + mid + high + 0.0001
+    const hue = (
+      24 * (low / weight) +
+      140 * (mid / weight) +
+      235 * (high / weight)
+    )
+    const saturation = 35 + energy * 50
+    const lightness = 22 + energy * 25
+    const emissive = `hsl(${(hue + 18) % 360} ${saturation + 10}% ${lightness + 8}%)`
+    const color = `hsl(${hue} ${saturation}% ${lightness}%)`
+    const opacity = 0.18 + energy * 0.22
+    return { color, emissive, opacity }
+  },
+
+  _spawnStroke(pos, size, opacity, color, emissive, lifeMs) {
     if (this.strokes.length >= this.maxStrokes) {
       const old = this.strokes.shift()
       old.parentNode && old.parentNode.removeChild(old)
     }
 
     const e = document.createElement('a-entity')
-    e.setAttribute('geometry', 'primitive: icosahedron; radius: 1; detail: 0')
+    e.setAttribute(
+      'geometry',
+      'primitive: sphere; radius: 1; segmentsWidth: 14; segmentsHeight: 10'
+    )
     e.setAttribute('material', `
       color: ${color};
       opacity: ${opacity};
+      shader: standard;
+      roughness: 0.5;
+      metalness: 0.15;
+      emissive: ${emissive};
+      emissiveIntensity: 0.35;
       transparent: true;
       depthWrite: false
     `)
 
     e.object3D.position.copy(pos)
     e.object3D.scale.setScalar(size)
+    e.object3D.rotation.set(
+      Math.random() * Math.PI,
+      Math.random() * Math.PI,
+      Math.random() * Math.PI
+    )
 
     e.setAttribute(
-      'animation__fade',
-      `property: material.opacity; to: 0; dur: ${lifeMs}; easing: easeOutQuad`
+      'animation__dry',
+      `property: material.opacity; to: 0.12; dur: ${lifeMs}; easing: easeOutQuad`
     )
 
     this.world.appendChild(e)
@@ -101,18 +136,27 @@ AFRAME.registerComponent('brush-rig', {
       camObj.getWorldQuaternion(camWorldQuat)
       const dirFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camWorldQuat)
       const drawPos = camWorldPos.add(dirFwd.multiplyScalar(this.drawDist))
+      const spread = 0.05 + b.energy * 0.2
+      drawPos.add(
+        new THREE.Vector3(
+          (Math.random() - 0.5) * spread,
+          (Math.random() - 0.5) * spread,
+          (Math.random() - 0.5) * spread
+        )
+      )
 
       // dépôts parcimonieux
-      if (Math.sin(this.t * 2.0) > 0.75) {
-        if (b.low > 0.06) {
-          this._spawnStroke(drawPos, 0.14 + b.low * 0.3, 0.06, '#1b1b1b', 7000)
-        }
-        if (b.mid > 0.05) {
-          this._spawnStroke(drawPos, 0.11 + b.mid * 0.25, 0.05, '#2a2a2a', 6000)
-        }
-        if (b.high > 0.04) {
-          this._spawnStroke(drawPos, 0.08 + b.high * 0.18, 0.04, '#3a3a3a', 5000)
-        }
+      if (Math.sin(this.t * 2.4 + b.energy * 6.0) > 0.4) {
+        const paint = this._palette(b)
+        const size = 0.08 + b.energy * 0.32 + b.low * 0.12
+        this._spawnStroke(
+          drawPos,
+          size,
+          paint.opacity,
+          paint.color,
+          paint.emissive,
+          STROKE_LIFE_MS
+        )
       }
     }
   }
