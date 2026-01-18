@@ -19,70 +19,30 @@ export class BrushRibbon {
     this.controlPoints = []
     this.curve = new THREE.CatmullRomCurve3(this.controlPoints)
     this.geometry = new THREE.BufferGeometry()
-    this.texture = this._createWatercolorTexture()
     this.material = new THREE.MeshStandardMaterial({
-      color: '#1d1d1d',
-      vertexColors: true,
+      color: '#f4f0e8',
       transparent: true,
       opacity: this.opacity,
       depthWrite: false,
       side: THREE.DoubleSide,
-      map: this.texture,
-      roughness: 0.65,
-      metalness: 0.02
+      roughness: 0.6,
+      metalness: 0.05
     })
     this.mesh = new THREE.Mesh(this.geometry, this.material)
     this.mesh.frustumCulled = false
     this.world.object3D.add(this.mesh)
 
-    this._up = new THREE.Vector3(0, 1, 0)
-    this._altUp = new THREE.Vector3(1, 0, 0)
-    this._tangent = new THREE.Vector3()
-    this._lateral = new THREE.Vector3()
-    this._left = new THREE.Vector3()
-    this._right = new THREE.Vector3()
     this._positions = null
     this._uvs = null
-    this._colors = null
     this._indices = null
-    this._baseColor = new THREE.Color()
-    this._tmpColor = new THREE.Color()
     this._initGeometry()
-  }
-
-  _createWatercolorTexture() {
-    const canvas = document.createElement('canvas')
-    canvas.width = 128
-    canvas.height = 16
-    const ctx = canvas.getContext('2d')
-    const grad = ctx.createLinearGradient(0, 0, canvas.width, 0)
-    grad.addColorStop(0, 'rgba(255,255,255,0.2)')
-    grad.addColorStop(0.5, 'rgba(255,255,255,0.9)')
-    grad.addColorStop(1, 'rgba(255,255,255,0.2)')
-    ctx.fillStyle = grad
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-    for (let i = 0; i < 220; i += 1) {
-      const x = Math.floor(Math.random() * canvas.width)
-      const y = Math.floor(Math.random() * canvas.height)
-      const alpha = 0.08 + Math.random() * 0.25
-      const size = 1 + Math.random() * 3
-      ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`
-      ctx.fillRect(x, y, size, size)
-    }
-    const texture = new THREE.CanvasTexture(canvas)
-    texture.wrapS = THREE.RepeatWrapping
-    texture.wrapT = THREE.ClampToEdgeWrapping
-    texture.repeat.set(2, 1)
-    texture.needsUpdate = true
-    return texture
   }
 
   _initGeometry() {
     const vertexCount = (this.sampleCount + 1) * 2
     this._positions = new Float32Array(vertexCount * 3)
     this._uvs = new Float32Array(vertexCount * 2)
-    this._colors = new Float32Array(vertexCount * 3)
-    this._indices = new Uint16Array(this.sampleCount * 6)
+    this._indices = new Uint32Array(this.sampleCount * 6)
 
     for (let i = 0; i <= this.sampleCount; i += 1) {
       const t = i / this.sampleCount
@@ -109,14 +69,13 @@ export class BrushRibbon {
 
     this.geometry.setAttribute('position', new THREE.BufferAttribute(this._positions, 3))
     this.geometry.setAttribute('uv', new THREE.BufferAttribute(this._uvs, 2))
-    this.geometry.setAttribute('color', new THREE.BufferAttribute(this._colors, 3))
     this.geometry.setIndex(new THREE.BufferAttribute(this._indices, 1))
   }
 
   _ensureControlPoints(drawPos) {
     if (this.controlPoints.length > 0) return
     for (let i = 0; i < this.maxControlPoints; i += 1) {
-      const offset = new THREE.Vector3(0, 0, -0.12 * i)
+      const offset = new THREE.Vector3(0, 0, -0.001 * i)
       this.controlPoints.push(drawPos.clone().add(offset))
     }
   }
@@ -127,8 +86,7 @@ export class BrushRibbon {
     lastPoint.lerp(drawPos, 0.04)
 
     for (let i = lastIndex - 1; i >= 0; i -= 1) {
-      const lag = 0.012 + (lastIndex - i) * 0.015
-      this.controlPoints[i].lerp(this.controlPoints[i + 1], lag)
+      this.controlPoints[i].lerp(this.controlPoints[i + 1], 0.08)
     }
   }
 
@@ -138,39 +96,26 @@ export class BrushRibbon {
 
     this.width = lerp(this.width, this.baseWidth + audio.mid * 0.3, 0.05)
     this.opacity = lerp(this.opacity, this.baseOpacity + audio.low * 0.1, 0.03)
-    this.material.opacity = clamp(this.opacity, 0.06, 0.12)
-    const hue = ((time * 0.01) + audio.mid * 0.55 + audio.high * 0.2) % 1
-    const saturation = clamp(0.55 + audio.energy * 0.35, 0.4, 0.95)
-    const lightness = clamp(0.45 + audio.low * 0.2, 0.25, 0.75)
-    this._baseColor.setHSL(hue, saturation, lightness)
-    this.material.color.copy(this._baseColor)
+    this.material.opacity = clamp(this.opacity, 0.05, 0.12)
 
     const pts = this.curve.getPoints(this.sampleCount)
-    const up = this._up
-    const altUp = this._altUp
-    const lateral = this._lateral
-    const tangent = this._tangent
+    const up = new THREE.Vector3(0, 1, 0)
+    const altUp = new THREE.Vector3(1, 0, 0)
+    const lateral = new THREE.Vector3()
+    const tangent = new THREE.Vector3()
 
     for (let i = 0; i < pts.length; i += 1) {
       const t = i / (pts.length - 1)
       this.curve.getTangentAt(t, tangent)
-      if (tangent.lengthSq() < 1e-6) {
-        tangent.set(0, 0, 1)
-      }
 
       const axis = Math.abs(tangent.dot(up)) > 0.9 ? altUp : up
-      lateral.crossVectors(tangent, axis)
-      if (lateral.lengthSq() < 1e-6) {
-        lateral.set(1, 0, 0)
-      } else {
-        lateral.normalize()
-      }
+      lateral.crossVectors(tangent, axis).normalize()
 
       const wobble = Math.sin(time * 0.0012 + i * 0.35) * audio.high * 0.03
       const halfWidth = this.width * 0.5 + wobble
 
-      const left = this._left.copy(pts[i]).addScaledVector(lateral, halfWidth)
-      const right = this._right.copy(pts[i]).addScaledVector(lateral, -halfWidth)
+      const left = pts[i].clone().addScaledVector(lateral, halfWidth)
+      const right = pts[i].clone().addScaledVector(lateral, -halfWidth)
 
       const row = i * 2
       const posIndex = row * 3
@@ -180,27 +125,15 @@ export class BrushRibbon {
       this._positions[posIndex + 3] = right.x
       this._positions[posIndex + 4] = right.y
       this._positions[posIndex + 5] = right.z
-
-      const fade = 1 - t * 0.85
-      this._tmpColor.copy(this._baseColor).multiplyScalar(fade)
-      this._colors[posIndex] = this._tmpColor.r
-      this._colors[posIndex + 1] = this._tmpColor.g
-      this._colors[posIndex + 2] = this._tmpColor.b
-      this._colors[posIndex + 3] = this._tmpColor.r
-      this._colors[posIndex + 4] = this._tmpColor.g
-      this._colors[posIndex + 5] = this._tmpColor.b
     }
 
     this.geometry.attributes.position.needsUpdate = true
-    this.geometry.attributes.color.needsUpdate = true
     this.geometry.computeVertexNormals()
-    this.geometry.computeBoundingSphere()
   }
 
   dispose() {
     this.world.object3D.remove(this.mesh)
     this.geometry.dispose()
     this.material.dispose()
-    this.texture?.dispose()
   }
 }
