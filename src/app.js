@@ -46,8 +46,14 @@ AFRAME.registerComponent('brush-rig', {
     )
     const saturation = 35 + energy * 50
     const lightness = 22 + energy * 25
-    const emissive = `hsl(${(hue + 18) % 360} ${saturation + 10}% ${lightness + 8}%)`
-    const color = `hsl(${hue} ${saturation}% ${lightness}%)`
+    const colorObj = new THREE.Color().setHSL(hue / 360, saturation / 100, lightness / 100)
+    const emissiveObj = new THREE.Color().setHSL(
+      ((hue + 18) % 360) / 360,
+      (saturation + 10) / 100,
+      (lightness + 8) / 100
+    )
+    const color = `#${colorObj.getHexString()}`
+    const emissive = `#${emissiveObj.getHexString()}`
     const opacity = 0.18 + energy * 0.22
     return { color, emissive, opacity }
   },
@@ -63,17 +69,17 @@ AFRAME.registerComponent('brush-rig', {
       'geometry',
       'primitive: sphere; radius: 1; segmentsWidth: 14; segmentsHeight: 10'
     )
-    e.setAttribute('material', `
-      color: ${color};
-      opacity: ${opacity};
-      shader: standard;
-      roughness: 0.5;
-      metalness: 0.15;
-      emissive: ${emissive};
-      emissiveIntensity: 0.35;
-      transparent: true;
+    e.setAttribute('material', {
+      color,
+      opacity,
+      shader: 'standard',
+      roughness: 0.5,
+      metalness: 0.15,
+      emissive,
+      emissiveIntensity: 0.35,
+      transparent: true,
       depthWrite: false
-    `)
+    })
 
     e.object3D.position.copy(pos)
     e.object3D.scale.setScalar(size)
