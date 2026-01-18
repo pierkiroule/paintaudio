@@ -15,7 +15,7 @@ export async function initMic() {
 
   const analyser = ctx.createAnalyser()
   analyser.fftSize = 512
-  analyser.smoothingTimeConstant = 0.85
+  analyser.smoothingTimeConstant = 0.72
 
   const fft = new Uint8Array(analyser.frequencyBinCount)
   ctx.createMediaStreamSource(stream).connect(analyser)
@@ -38,7 +38,7 @@ export function readBands(analyser, fft) {
   const high = avg(fft, n * 0.6, n)
 
   const raw = Math.min(1, low * 0.55 + mid * 1.0 + high * 0.35)
-  const energy = lastEnergy = lastEnergy * 0.85 + raw * 0.15
+  const energy = lastEnergy = lastEnergy * 0.72 + raw * 0.28
 
   return { low, mid, high, energy }
 }
