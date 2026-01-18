@@ -103,15 +103,17 @@ AFRAME.registerComponent('brush-rig', {
       return
     }
 
-    // mouvement caméra lent et stable
-    const nx = Math.sin(this.t * 0.15)
-    const nz = Math.cos(this.t * 0.18)
+    // mouvement caméra plus varié, synchronisé à l’audio
+    const orbitSlow = 1.8 + Math.sin(this.t * 0.08) * 0.6
+    const orbitFast = 0.9 + Math.sin(this.t * 0.24 + Math.sin(this.t * 0.05)) * 0.45
+    const sway = 1 + b.energy * 0.75 + b.high * 0.35
+    const angle = this.t * (0.12 + b.energy * 0.08) + Math.sin(this.t * 0.07) * 0.5
+    const tilt = Math.sin(this.t * 0.3) * 0.35 + Math.cos(this.t * 0.18) * 0.2
 
-    const sway = 1 + b.energy * 0.6
     this.target.set(
-      nx * 2.6 * sway,
-      1.6 + Math.sin(this.t * 0.22) * 0.12 * sway,
-      3.2 + nz * 2.6 * sway
+      Math.cos(angle) * orbitSlow * sway + Math.sin(this.t * 0.4) * orbitFast,
+      1.45 + Math.sin(this.t * 0.21) * 0.22 * sway + tilt * 0.3,
+      3.0 + Math.sin(angle) * orbitSlow * sway + Math.cos(this.t * 0.36) * orbitFast
     )
 
     this.dir.copy(this.target).sub(this.pos)
@@ -120,12 +122,18 @@ AFRAME.registerComponent('brush-rig', {
     this.pos.add(this.vel)
     this.el.object3D.position.copy(this.pos)
 
-    // orientation douce (pas de lookAt brutal)
-    this.el.object3D.rotation.y += Math.sin(this.t * 0.1) * 0.0011 * (1 + b.energy * 0.5)
+    // orientation douce (pas de lookAt brutal) avec variations
+    this.el.object3D.rotation.y += Math.sin(this.t * 0.1) * 0.0011 * (1 + b.energy * 0.7)
+    this.el.object3D.rotation.y += Math.sin(this.t * 0.28 + b.high * 1.5) * 0.0007
 
     const rotBlend = 1 - Math.exp(-dt * 0.0025)
-    const pitchTarget = Math.sin(this.t * 0.12) * 0.24 + Math.sin(this.t * 0.32) * 0.12
-    const rollTarget = Math.cos(this.t * 0.17) * 0.12
+    const pitchTarget = Math.sin(this.t * 0.12) * 0.24 +
+      Math.sin(this.t * 0.32) * 0.12 +
+      Math.sin(this.t * 0.48) * 0.06 +
+      b.high * 0.08
+    const rollTarget = Math.cos(this.t * 0.17) * 0.12 +
+      Math.sin(this.t * 0.27) * 0.08 -
+      b.low * 0.05
     this.pitch = THREE.MathUtils.lerp(this.pitch, pitchTarget, rotBlend)
     this.roll = THREE.MathUtils.lerp(this.roll, rollTarget, rotBlend)
     if (this.camera) {
