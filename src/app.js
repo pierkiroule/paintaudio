@@ -1,5 +1,5 @@
 import { initMic, readBands } from './audio.js'
-import { AutoProgramManager, BrushManager } from './brushes.js'
+import { BrushRibbon } from './brushes.js'
 
 const DRAW_BASE_DIST = 1.1
 
@@ -9,8 +9,6 @@ AFRAME.registerComponent('brush-rig', {
     this.status = document.getElementById('status')
     this.cursor = document.getElementById('drawCursor')
     this.camera = this.el.querySelector('a-camera')
-    this.autoBtn = document.getElementById('autoBtn')
-
     this.analyser = null
     this.fft = null
     this.t = 0
@@ -32,29 +30,13 @@ AFRAME.registerComponent('brush-rig', {
     this.roll = 0
     this.audioSmooth = { low: 0, mid: 0, high: 0, energy: 0 }
 
-    this.brushManager = new BrushManager(this.world)
-    this.brushManager.addSlot({
-      name: 'center',
-      offset: new THREE.Vector3(0, 0, 0),
-      distance: DRAW_BASE_DIST,
-      type: 'ink'
+    this.ribbon = new BrushRibbon({
+      world: this.world,
+      maxControlPoints: 5,
+      sampleCount: 40,
+      baseWidth: 0.06,
+      baseOpacity: 0.08
     })
-    this.brushManager.addSlot({
-      name: 'left',
-      offset: new THREE.Vector3(-0.3, 0.02, 0),
-      distance: DRAW_BASE_DIST - 0.25,
-      type: 'bubbles'
-    })
-    this.brushManager.addSlot({
-      name: 'right',
-      offset: new THREE.Vector3(0.3, -0.02, 0),
-      distance: DRAW_BASE_DIST + 0.25,
-      type: 'glow'
-    })
-
-    this.autoManager = new AutoProgramManager(this.brushManager)
-    this.autoManager.applyProgram(0)
-    this.autoEnabled = true
     this.drawingEnabled = true
 
     const micBtn = document.getElementById('micBtn')
@@ -66,18 +48,10 @@ AFRAME.registerComponent('brush-rig', {
       this.status.textContent = 'mic:on'
     })
 
-    if (this.autoBtn) {
-      this.autoBtn.addEventListener('click', () => {
-        this.autoEnabled = !this.autoEnabled
-        this.autoManager.setEnabled(this.autoEnabled && this.drawingEnabled)
-        this.autoBtn.textContent = this.autoEnabled ? 'AUTO:ON' : 'AUTO:OFF'
-      })
-    }
   },
 
   setDrawingEnabled(enabled) {
     this.drawingEnabled = enabled
-    this.autoManager.setEnabled(enabled && this.autoEnabled)
   },
 
   tick(t, dt) {
@@ -95,8 +69,7 @@ AFRAME.registerComponent('brush-rig', {
     const b = this.audioSmooth
 
     if (this.analyser) {
-      const program = this.autoEnabled ? ` · ${this.autoManager.getCurrentName()}` : ''
-      this.status.textContent = `mic:on ${b.energy.toFixed(2)}${program}`
+      this.status.textContent = `mic:on ${b.energy.toFixed(2)}`
     }
 
     if (!this.drawingEnabled) {
@@ -156,19 +129,10 @@ AFRAME.registerComponent('brush-rig', {
     this.dirRight.set(1, 0, 0).applyQuaternion(this.camWorldQuat)
     this.dirUp.set(0, 1, 0).applyQuaternion(this.camWorldQuat)
 
-    if (this.autoEnabled) {
-      this.autoManager.update(dt, b.energy)
-    }
-
-    this.brushManager.update(
-      b,
-      t,
-      dt,
-      this.camWorldPos,
-      this.dirFwd,
-      this.dirRight,
-      this.dirUp
-    )
+    const drawPos = this.camWorldPos
+      .clone()
+      .addScaledVector(this.dirFwd, this.drawDist)
+    this.ribbon.update(drawPos, b, t)
   }
 })
 
